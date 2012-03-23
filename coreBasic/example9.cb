@@ -1,0 +1,8 @@
+a = 0
+label test
+  a = a + 1
+  disp(a)
+  disp("\n")
+if(a < 10)
+  goto test
+end

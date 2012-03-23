@@ -1,0 +1,12 @@
+a = 1
+b = 2
+disp(a + b)
+disp("\n")
+disp(a * b)
+disp("\n")
+disp(a - b)
+disp("\n")
+disp(a / b)
+disp("\n")
+disp(a % b)
+disp("\n")

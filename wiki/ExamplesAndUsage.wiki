@@ -1,0 +1,35 @@
+= Introduction =
+
+cBasic can be used in a variety of ways. One is to run it "out of the box" as a command-line application to compile and execute your own cBasic programs. Another is to write your own interface to the cBasic virtual machine and have it run in your own application. You may even choose to take the source code, fork it, and create new functions that allow the code to interact with the host, much like a game-scripting language.
+
+== Command-Line Usage ==
+
+  * Usage: ./cbasic [options] source file...
+    * None
+        * Interprets the given source file, then executes code
+    * -h
+        * Prints this help message\n"
+    * -v
+        * Verbose mode, printing the instructions and memory maps
+    * -o {{{<name>}}}
+        * Generates and stores byte-code into the given output file
+    * -i {{{<file>}}}
+        * Executes the given byte-code file
+
+== Code Interface ==
+
+Create a new virtual machine and simulation to contain your compiled code requires you to create a "cbProcessor" object found in "cbLang.h". Then, you must initialize it using one of two methods: if you have just the source code, call the function "cbInit_LoadSource(...)" with the source code as a string, the maximum memory size you want to give to the VM, and which streams you want standard input and output to occur on. The second method, used if you already have compiled code, would be to use "cbInit_LoadCompiled(...)" using the same arguments, but instead of giving it code as a string, you can give it the file stream of the compiled byte-code.
+
+Once the VM is initialized with the byte-code without any compile-time errors, you can begin the simulation loop, which is as easy as calling the "cbStep(...)" function. This function will simulate a single instruction execution and will return any sort of error if an error occurs. It is important to check for these error states to know if something has failed at run-time or if the program has completed. After simulation a single step in the execution flow, one should check for any interruptions, commonly used for waiting for user input: this is done by checking with "cbStep_IsInterrupted(...)". If an interruption is raised, check what kind of interruption it is (i.e. are we pausing for any input, a single key-stroke, or a full string?), then fulfill the request using whatever method fits your host operating system, and post the result in "cbStep_ReleaseInterrupt(...)", which will then continue the flow of execution. Note that while the VM is interrupted, calls to "cbStep(...)" will be ignored until the interruption is released.
+
+Once the simulation is completed, either by error or by correct program termination, you must release all internal allocations using "cbRelease(...)" with the cbProcessor object initialized at the start.
+
+== Saving Compiled Byte-Code ==
+
+Note that one can compile code and save it to a file without ever executing it. Simply initialize a new VM using the "cbInit_LoadSource(...)" function and then call the "cbInit_SaveCompile(...)" function, passing the processor handle and an open file stream to write to.
+
+The general file format is three "size_t" variables at the top, then direct copies of the code segment and data segment. The first "size_t" variable represents the number of "true variables" in the data segment, the second is when the data segment should begin, and the third is when the data segment should end. Using this, one can quickly rebuild a correct VM state with all the necessary process information.
+
+== Examples ==
+
+A dozen examples can be found in the source code [http://code.google.com/p/corebasic/source/browse/#svn%2FcoreBasic here, all ending in *.cb] (for cBasic source).

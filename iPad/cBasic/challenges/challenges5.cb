@@ -1,0 +1,12 @@
+// Challenge: "Decimal to Binary!" (Difficulty: 2 of 5)
+// Description:
+//   Given an integer n, print its base 2 ( binary) form. This integer
+//   n will always be positive.
+
+// Read the user decimal value "n"
+n = input()
+
+// Convert n from base 10 to base 2
+
+// Print result
+disp(n)

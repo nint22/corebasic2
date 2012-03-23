@@ -1,0 +1,347 @@
+= Introduction =
+
+CoreBasic, or cBasic, is an [http://en.wikipedia.org/wiki/Imperative_programming imperative] and [http://en.wikipedia.org/wiki/Procedural_programming procedural] programming language that is similar to [http://en.wikipedia.org/wiki/BASIC BASIC]-like syntax, but more closely resembles [http://en.wikipedia.org/wiki/TI-BASIC TI-Basic]. The type system is dynamic and implied, meaning that there are four major types (int, float, bool, and string), but variables are assigned the implied type. For example, if the user writes "a = 1", it is implied that the variable 'a' is an integer, while if the user writes "a = 1.0" then it is implied that variable 'a' is a float.
+
+To keep the language clean and simple, but meet the target goal of "easy to learn and developed for academic purposes", advanced features like multi-threading, object-oriented programming, and duck-typing is not supported, though can be added through extension of the current code base. The language _is_ case sensitive to force developers to maintain clean-looking code.
+
+== Structure ==
+
+The language resembles imperative block-like syntax. Each line should be a valid single expression. Operators, functions, and keywords can be stacked, meaning that a variable can be assigned the results of a function, in which function arguments contain expressions. Note that blocks are never defined by the C-style curly-braces, but simply by block-keywords (such as for, while, if, etc..) and the "end" keyword.
+
+Internally, the code is parsed using the [http://en.wikipedia.org/wiki/Shunting-yard_algorithm Shunting-yard Algorithm] into [http://en.wikipedia.org/wiki/Reverse_Polish_notation Reverse Polish notation] which helps during execution and code verification.
+
+== Data Types ==
+
+There are only four data types:
+
+  * Integers: signed whole numbers, that are the size of the host system's word size (i.e. a 32-bit architecture will allow for a 32-bit signed integer)
+  * Floats: signed floating-point (decimal) values, that are the size of the host system's word size
+  * Boolean: either a true or false statement, which is represented as an integer: false is always 0, while true is any other value
+  * String: an array of characters that are null terminated (internally, strings themselves are always stored in the data section of a program, while the variable itself acts as a pointer to this data). Note that string-concatenation is not a feature of this language
+
+== Comments ==
+
+C-style double-slash comments are allowed on any line. Any comment at the end of a line of code is ignored, while the code itself is left alone. Lines with comments are ignored and removed entirely.
+
+Slash-star comments (i.e. {{{/* C-style slash-star comment */}}}) are not allowed.
+
+== Key Words ==
+
+_Reserved, but private: "loaddata", "loadvar", "addstack"_
+
+  * *if(<boolean expression>)*
+    * If the expression is true, execute the code within the associated block and go to the end of the if/else group, else, continue the flow of execution
+_Example:_
+{{{
+if(input() <= 10)
+  disp("You must input a number greater than 10!")
+end
+}}}
+
+
+  * *elif(<boolean expression>)*
+    * If the expression is true, execute the code within the associate block and go to the end of the if/else group, else, continue the flow of execution
+_Example:_
+{{{
+if(x < 10)
+  disp("X is smaller than 10")
+elif(x < 20)
+  disp("X is smaller than 20")
+end
+}}}
+
+  * *else*
+    * The conditional block that is always executed in an if/else group if no other conditional case is met
+_Example:_
+{{{
+if(x < 10)
+  disp("X is smaller than 10")
+else
+  disp("X is equal to, or greater, than 10")
+end
+}}}
+
+  * *for(<iteration variable>, <initial value expression, inclusive>, <max value expression, inclusive>, <increment expression>)*
+    * Loops through the code associated with this block, iterating with the given variable, starting with an initial value given, and goes up to the maximum value given (inclusive). Each loop increases the iterating variable by the given amount
+_Example:_
+{{{
+for(i, 1, 10, 1)
+  disp("Var i: ")
+  disp(i)
+  disp("\n")
+end
+}}}
+
+  * *while(<boolean expression>)*
+    * Loops through the code associated with this block until the given boolean expresion is false
+_Example:_
+{{{
+i = 1
+while(i <= 10)
+  disp("Var i: ")
+  disp(i)
+  disp("\n")
+  i = i + 1
+end
+}}}
+
+  * *end*
+    * Defines the end of a conditional or loop block.
+_Example_
+{{{
+while(a < 5)
+  // Do something...
+end
+}}}
+
+  * *pause*
+    * Interrupts the application and pauses the flow of execution until there is any key-press from the user
+_Example_
+{{{
+disp("Press any key to continue...")
+pause
+}}}
+
+  * *label <label name>*
+    * A label that can be jumped to using the _goto_ keyword
+_Example_
+{{{
+label sample
+// This is an example of an infinite while-loop
+goto sample
+}}}
+
+  * *goto <label name>*
+    * Jumps to a given label name
+_Example_
+{{{
+label sample
+// This is an example of an infinite while-loop
+goto sample
+}}}
+
+  * *exec <function name>*
+    * _Not yet defined_
+
+  * *return <value expression>*
+    * _Not yet defined_
+
+  * *stop*
+    * Halts the simulation / process, which flags the process as correctly complete, and not halted because of an error
+_Example_
+{{{
+// Done with the code, stop the program
+stop
+}}}
+
+  * *input*
+    * Returns any and all user input as the best fitting type. If the user were to type an integer, it is cast to an integer, while if the user types an alpha-numeric string, it is returned as a string type
+_Example_
+{{{
+a = input()
+disp("You wrote: ")
+disp(a)
+}}}
+
+  * *disp(<literal, variable, or expression>)*
+    * Print out the given literal, variable, or expression
+_Example_
+{{{
+disp("Hello, World!\n")
+}}}
+
+  * *output _undefined_*
+    * _Not yet defined_
+
+  * *getKey*
+    * Returns a single character read from the user input stream
+_Example_
+{{{
+key = getKey()
+disp("You pressed: ")
+disp(key)
+}}}
+
+  * *clear*
+    * Clear all output, including the text and screen output buffers
+_Example_
+{{{
+// Clear screen
+clear()
+}}}
+
+  * *func <function name>*
+    * Define a function and the arguments
+_Example_
+{{{
+func add_one(int x)
+  return x + 1
+end
+}}}
+
+  * *=*
+    * Set operator
+_Example_
+{{{
+variable = 10
+}}}
+
+  * *+*
+    * Addition operator
+_Example_
+{{{
+variable = 1 + 2
+}}}
+
+  * *-*
+    * Subtraction operator
+_Example_
+{{{
+variable = 1 - 2
+}}}
+
+  * *{{{*}}}*
+    * Multiplication operator
+_Example_
+{{{
+variable = 1 * 2
+}}}
+
+  * */*
+    * Division operator
+_Example_
+{{{
+variable = 1 / 2
+}}}
+
+  * *%*
+    * Modulo (remainder) operator
+_Example_
+{{{
+variable = 1 % 2
+}}}
+
+  * *{{{==}}}*
+    * Equivalence operator; note that certain variables will change type as needed. Integers and booleans will become interchangeable, while a floating-point variable will round-down to an integer
+_Example_
+{{{
+if(a == b)
+  disp("Variable A is equal to B")
+end
+}}}
+
+  * *!=*
+    * Non-equivalence operator; note that this follows the same casting rules as the equivalence operator
+_Example_
+{{{
+if(a == b)
+  disp("Variable A is not equal to B")
+end
+}}}
+
+  * *>*
+    * Greater-than operator; note that this follows the same casting rules as the equivalence operator
+_Example_
+{{{
+if(a > b)
+  disp("Variable A larger than B")
+end
+}}}
+
+  * *>=*
+    * Greater-than-or-equal operator; note that this follows the same casting rules as the equivalence operator
+_Example_
+{{{
+if(a > b)
+  disp("Variable A larger than or equal B")
+end
+}}}
+
+  * *<*
+    * Smaller-than operator; note that this follows the same casting rules as the equivalence operator
+_Example_
+{{{
+if(a < b)
+  disp("Variable A less than B")
+end
+}}}
+
+  * *<=*
+    * Smaller-than-or-equal operator; note that this follows the same casting rules as the equivalence operator
+_Example_
+{{{
+if(a > b)
+  disp("Variable A less than or equal to B")
+end
+}}}
+
+  * *! <boolean | integer | expression>*
+    * Logical not operator
+_Example_
+{{{
+a = true
+a = !a
+// A will now always be false
+}}}
+
+  * *<variable | expression> and <variable | expression>*
+    * Logical and
+_Example_
+{{{
+if(a and b)
+  disp("A and B are set to true")
+end
+}}}
+
+  * *<variable | expression> or <variable | expression>*
+    * Logical or
+_Example_
+{{{
+if(a or b)
+  disp("A or B are set to true")
+end
+}}}
+
+== Formal Language Definition ==
+
+_The following is a simplified / informal [http://en.wikipedia.org/wiki/Context-free_grammar Context-free grammar] description of the cBasic language_
+
+Let S be any given string within a valid program of cBasic, delimited by a space character; accepted characters for the entire language are all ASCII alpha-numeric. Unicode / wide-characters are not supported. A string S may be empty. Function arguments are delimited by commas (',').
+
+  * S → {'a' - 'z' | 'A' - 'Z' | '0' - '9'}
+  * S → SS
+  * S → {_empty set_}
+
+Math rules:
+
+  * S → (S)
+  * S → S + S
+  * S → S - S
+  * S → S {{{*}}} S
+  * S → S / S
+  * S → S % S
+
+Boolean comparisons:
+
+  * S → S < S
+  * S → S <= S
+  * S → S > S
+  * S → S >= S
+  * S → S == S
+  * S → S != S
+  * S → !S
+  * S → S = S
+
+Keyword-specific rules
+
+  * S → if(S) [new line] S [new line] end
+  * S → elif(S) [new line] E
+  * E → else s [new line] end
+  * S → while(S) [new line] S [new line] end
+  * S → for(S, S, S, S) [new line] S [new line] end
+  * S → disp(S)
+  * S → exec S(S)
+  * S → input()
+  * S → pause()
+  * S → label S:
+  * S → goto S

@@ -1,0 +1,12 @@
+// Challenge: "Sum of Multiples 3 & 5!" (Difficulty: 2 of 5)
+// Description:
+//   If we list all the numbers from 1 to 10, only the numbers 3, 5, 6,
+//   9, 10 are multiples of 3 and 5. Your goal is to write code that,
+//   for a range of 1000, you must return the sum of all
+//   numbers that are multples of 3 and 5.
+
+// Starter code:
+
+for(i, 1, 1000, 1)
+  // Do something here...
+end

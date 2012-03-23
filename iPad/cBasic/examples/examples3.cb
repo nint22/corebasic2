@@ -1,0 +1,10 @@
+if(0)
+  disp(1)
+  disp("\n")
+elif(0)
+  disp(2)
+  disp("\n")
+else
+  disp(3)
+  disp("\n")
+end

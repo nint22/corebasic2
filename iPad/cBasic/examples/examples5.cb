@@ -1,0 +1,16 @@
+disp("Testing boolean logic!\n")
+
+MyAge = 23
+MyHeight = 60
+
+if(MyAge >= 21 and MyHeight >= 48)
+  disp("You are able to ride!\n")
+elif(MyAge < 21 and MyHeight >= 48)
+  disp("Not old enough!\n")
+elif(MyHeight < 48 and MyAge >= 21)
+  disp("Not tall enough!\n")
+else
+  disp("Not old and tall enough!\n")
+end
+
+disp("Done!\n")

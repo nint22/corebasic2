@@ -1,0 +1,16 @@
+disp("Starting code!\n")
+a = 1
+while(a <= 10)
+  disp("a: ")
+  disp(a)
+  disp("\n")
+  a = a + 1
+  
+  b = a
+  while(b <= 10)
+    disp(b)
+    b = b + 1
+  end
+  
+end
+disp("Done!\n")

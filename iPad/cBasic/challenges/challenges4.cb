@@ -1,0 +1,16 @@
+// Challenge: "Engine Safety!" (Difficulty: 1 of 5)
+// Description:
+//   If we list all the numbers from 1 to 10, only the numbers 3, 5, 6,
+//   Write code that prints True or False if an engine should be turned
+//   on or off based on sensor values (from user input). Your code
+//   must take two sensor readings: the engine block tempurature first
+//   and the oil reserve second, both as integers from user input. If the
+//   engine block tempurature is ever above 100 degrees, print false
+//   (off). If the oil is low and the engine block is above 80, print false
+//   (off). The oil reserve is an integer ranging from 0 to 2 (inclusive).
+//   0 means an empty oil reserve, in which your code should print
+//   false (off). 1 means low oil, while 2 means standard oil volume.
+//   In any other condition, print true (on) for the engine state.
+
+// Read the first value "tempurature"
+tempurature = input()

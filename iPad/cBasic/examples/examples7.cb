@@ -1,0 +1,10 @@
+if(1)
+    disp("First part of outer group\n")
+    if(0)
+        disp("First part of inner group\n")
+    else
+        disp("Second part of inner group\n")
+    end
+else
+    disp("Second part of outer group\n")
+end

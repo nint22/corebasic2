@@ -1,0 +1,12 @@
+// Challenge: "Hello, World!" (Difficulty: 1 of 5)
+// Description:
+//   "Hello, World!" is a string made famous from the original The C
+//   Programming Language book written by Brian Kernighan and
+//   Dennis Ritchie. The "Hello, World!" program was one of the
+//   first examples used to demonstrate the language. Your goal,
+//   to solve this programming challenge, will be to write a simple
+//   program that prints this string.
+
+// Starter code:
+
+disp("Something here!\n")

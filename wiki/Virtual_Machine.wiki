@@ -1,0 +1,104 @@
+= Introduction =
+
+coreBasic, or "cBasic" for short, runs in a sort of [http://en.wikipedia.org/wiki/Virtual_machine Virtual Machine], which is an isolated (sandbox) process that executes only a set of pre-defined instructions, similar to assembly language, from a given cBasic program. This program can only manipulate certain segments of memory in this process, specifically just the memory allocated by the VM for the cBasic program. If the cBasic program ever attempts to reach for memory addresses outside of the Virtual Machine, the simulation is halted and killed.
+
+Note that in the documentation and source code itself, the term "Virtual Machine", "simulation", and "process" are all used interchangeably, though are remarkably different in other applications. Since the cBasic run-time only does software-emulation of a virtual computer architecture (i.e. does not do [http://en.wikipedia.org/wiki/Hardware_virtualization hardware virtualization]), it can be more correctly described as a simulation. The term virtual machine is used when describing the code that executes this software-emulation, while the simulation describes the system as a whole, and the process is the implementation environment of the simulation.
+
+= cBasic Virtual Machine Description =
+
+== cBasic Processor ==
+
+The cBasic processor is a simple single-instruction pipeline architecture that fetches an instruction based on the current instruction pointer (i.e. instruction counter), executes this instruction, then places the results on the stack. There are only a few "registers" (which are variables in the "cbProcessor" data structure) in each VM processor. All memory-manipulation is done on a stack that grows from a high-to-low address scheme, and generally does all operators in a [http://en.wikipedia.org/wiki/Reverse_Polish_notation Reverse Polish notation] method. This means that to compute the expression "4 + 3", the stack has the literals "4" and "3", pushed, then the instruction "+" is executed, popping off both those elements, and pushing the result of "7".
+
+== cBasic Registers ==
+
+_Note that all registers are of "size_t", usually defined as an "unsigned long" by your C compiler implementation and host operating system / host processor word-size._
+
+  * *Stack Pointer* - The address of the start of the current stack frame
+  * *Stack Base Pointer* - The address of the base of the current stack frame
+  * *Screen Pointer* - The starting address of the screen-memory allocation
+  * *Data Pointer* - The starting address of all static data
+  * *Instruction Pointer* - The address of the current instruction the processor is executing
+  * *Ticks* - The total number of instructions executed
+
+== cBasic Memory Layout ==
+
+The memory used by a running cBasic simulation is generally a single chunk of memory allocated by the host operating system. The implementation may choose either to use the standard heap-allocation system, or use [http://en.wikipedia.org/wiki/Mmap mmap] if a large chunk of memory is needed.
+
+The lower address of the memory layout contains three segments: code, data, and screen memory. The lowest segment, code, is an array of "cbInstruction" elements, which internally contain an operand (of type "cbOps") and an integer (of type "int"). The next segment, data, is an array of "cbVariable" followed by string-literals. Each "cbVariable" contains the data type of the variable, and the data itself. Some variables are offsets to the string-literals which are stored at the higher address. If one were to use the "cbDebug_PrintMemory" function, you will get a memory dump of a given cBasic data segment, which may look like the following:
+
+_Note: this memory dump comes from "example8.cb"_
+
+{{{
+=== coreBasic Static Memory ===
+ Variable Count: 7
+ Addr:  [Type    ]  Data
+
+ 0000:  [String  ]  112: How many times would you like to loop: 
+ 0016:  [Integer ]  0
+ 0032:  [String  ]  152: Only positive numbers please\n
+ 0048:  [Integer ]  1
+ 0064:  [String  ]  183: i: 
+ 0080:  [String  ]  187: \n
+ 0096:  [Integer ]  1
+ 0112:  [Raw Data]  48 6f 77 20 6d 61 6e 79 20 74 69 6d 65 73 20 77   How many times w
+ 0128:  [Raw Data]  6f 75 6c 64 20 79 6f 75 20 6c 69 6b 65 20 74 6f   ould you like to
+ 0144:  [Raw Data]  20 6c 6f 6f 70 3a 20 00 4f 6e 6c 79 20 70 6f 73    loop: .Only pos
+ 0160:  [Raw Data]  69 74 69 76 65 20 6e 75 6d 62 65 72 73 20 70 6c   itive numbers pl
+ 0176:  [Raw Data]  65 61 73 65 5c 6e 00 69 3a 20 00 5c 6e 00 00 00   ease\n.i: .\n...
+}}}
+
+Finally, the last segment on the lower-end of the memory-layout is the screen segment. This screen segment is a direct one-to-one map of a 96 x 64 pixel 2-bit (four colors) gray-scale screen. In total (96*64*2) / 8 = 1536, the screen always is 1536 bytes. The lower address is the top-left corner of the output image, with each growing address being the positive right-hand side of the screen, growing downwards towards the bottom of the screen.
+
+On the top of the memory-layout, from a high-to-low address growth, is the stack. Each element pushed is an "ibVariable", which the start of the stack is tracked by the processor's register "Stack Pointer". The "Stack Base Pointer" is the end of the stack, but before the variables loaded for a function frame.
+
+== cBasic Instruction Set ==
+
+_Note: Subject to change. Each instruction has a unique ID number, but that is not written here nor finalized until the public release of cBasic._
+
+=== Conditional ops. === 
+  * *cbOps_If*: If the top of the stack is true, continues flow of execution, else, jumps to the offset address in the arg
+
+=== Math ops. === 
+  * *cbOps_Add*: Add the two top elements from the stack, popping off each, dereferencing any reference variables, and pushing the result to the top of the stack
+  * *cbOps_Sub*: Subtracting the two top elements from the stack, popping off each, dereferencing any reference variables, and pushing the result to the top of the stack
+  * *cbOps_Mul*: Multiplying the two top elements from the stack, popping off each, dereferencing any reference variables, and pushing the result to the top of the stack
+  * *cbOps_Div*: Dividing the two top elements from the stack, popping off each, dereferencing any reference variables, and pushing the result to the top of the stack
+  * *cbOps_Mod*: Computing the remainder between the two top elements from the stack, popping off each, dereferencing any reference variables, and pushing the result to the top of the stack
+
+=== Comparison algebra ops. === 
+  * *cbOps_Eq*: Pops off the two top elements and pushes true if they are equal, else pushes a false
+  * *cbOps_NotEq*: Pops off the two top elements and pushes true if they are not equal, else pushes a false
+  * *cbOps_Greater*: Pops off the two top elements and pushes true if the first is greater than the second, else pushes a false
+  * *cbOps_GreaterEq*: Pops off the two top elements and pushes true if the first is greater or equal than the second, else pushes a false
+  * *cbOps_Less*: Pops off the two top elements and pushes true if the first is less than the second, else pushes a false
+  * *cbOps_LessEq*: Pops off the two top elements and pushes true if the first is greater or less than the second, else pushes a false
+
+=== Boolean ops. === 
+  * *cbOps_Not*: Pops off the top element, applying boolean not on it, and pushing the result
+  * *cbOps_And*: Pops off the two top elements from and pushes true if they are both logical-and, otherwise pushes a false
+  * *cbOps_Or*: Pops off the two top elements from and pushes true if they are both logical-or, otherwise pushes a false
+
+=== Program control ops. === 
+  * *cbOps_Goto*: Jumps the flow of execution (i.e. the "Instruction Pointer") to the given address offset
+  * *cbOps_Stop*: Halts the processor and stops all future execution; this is seen as a "clean-halt", and _not_ a crash or error
+
+=== Memory control === 
+  * *cbOps_Set*: Pops two variables from the stack (A and B), and places A into B, assuming B is a variable, while A can either be a literal or variable
+  * *cbOps_LoadData*: Push data from the data segment into the stack based on the instruction's argument, representing an address within that segment. Some data loaded may be literals (i.e. integers), or others may be references (i.e. strings)
+  * *cbOps_LoadVar*: Push the given variable from the stack frame (found after, in higher addresses, from the "Stack Base Pointer") onto the stack. Note that this variable is always an offset to the original memory location which is at a higher-address location from the "Stack Base Pointer"
+  * *cbOps_AddStack*: Grows the stack (i.e. lowers the "Stack Pointer" variable) by the given number of bytes in the argument of this instruction
+
+=== Input control === 
+  * *cbOps_Pause*: Interrupts the flow of execution until the owning process releases the interrupt using "cbStep_ReleaseInterrupt"
+  * *cbOps_Input*: Interrupts the flow of execution until the owning process releases the interrupt using "cbStep_ReleaseInterrupt" but must also post a string the user has written
+  * *cbOps_GetKey*: Interrupts the flow of execution until the owning process releases the interrupt using "cbStep_ReleaseInterrupt" but must also post a single-char string the user has written (i.e. a single key-stroke)
+
+=== Output control === 
+  * *cbOps_Disp*: Pops a variable from the stack and prints it to the defined output stream
+  * *cbOps_Output*: _Not yet defined_
+  * *cbOps_Clear*: _Not yet defined_
+
+=== Function control === 
+  * *cbOps_Exec*: _Not yet defined_
+  * *cbOps_Return*: _Not yet defined_
