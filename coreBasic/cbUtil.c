@@ -14,7 +14,7 @@
 
 #include "cbUtil.h"
 
-int cbOp_Precedence(const char* String, size_t StringLength)
+int cbLang_OpPrecedence(const char* String, size_t StringLength)
 {
     // Error check
     if(String == NULL)
@@ -50,7 +50,7 @@ int cbOp_Precedence(const char* String, size_t StringLength)
     return -1;
 }
 
-bool cbOp_LeftAssoc(const char* String, size_t StringLength)
+bool cbLang_OpLeftAssoc(const char* String, size_t StringLength)
 {
     // Only '=' and '!' is right associated, so return true on everything except rank 0 and 
     if(StringLength == 1 && (String[0] == '=' || String[0] == '!'))
@@ -98,7 +98,7 @@ bool cbLang_IsFunction(const char* String, size_t StringLength)
 bool cbLang_IsOp(const char* String, size_t StringLength)
 {
     // Coalesced code; always a valid op if 0 or precedence rank
-    return cbOp_LeftAssoc(String, StringLength) >= 0;
+    return cbLang_OpLeftAssoc(String, StringLength) >= 0;
 }
 
 bool cbLang_IsFloat(const char* String, size_t StringLength)
@@ -183,6 +183,36 @@ bool cbLang_IsReserved(const char* String, size_t StringLength)
     
     // Else, no match ever was found, so return false, not reserved
     return false;
+}
+
+bool cbList_CompareInt(void* A, void* B)
+{
+    // We know both should be cbVariables
+    cbVariable* VarA = (cbVariable*)A;
+    cbVariable* VarB = (cbVariable*)B;
+    
+    if(VarA->Type != VarB->Type)
+        return false;
+    else if(VarA->Type == cbType_Int && VarA->Data.Int != VarB->Data.Int)
+        return false;
+    // TODO: bool, string, float for comparison functions
+    
+    return true;
+}
+
+bool cbList_CompareString(void* A, void* B)
+{
+    // Both are strings, simple direct string compare is needed
+    if(strcmp((const char*)A, (const char*)B) == 0)
+        return true;
+    else
+        return false;
+}
+
+bool cbList_ComparePointer(void* A, void* B)
+{
+    // Straight address comparison
+    return (A == B);
 }
 
 const char* const cbLang_GetErrorMsg(cbError ErrorCode)

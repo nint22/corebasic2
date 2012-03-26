@@ -17,7 +17,54 @@
 
 #include "cbUtil.h"
 
-/*** Data / Language Definition ***/
+/*** Context-Free Grammar Language Definition ***/
+
+// Based on the CFG formal language defintion found
+// here: code.google.com/p/corebasic/wiki/cBasic
+// Basic rule is: Symbol -> string of terminals
+
+// Note that the production rules are implemented as functions within cbLang
+
+// Symbols list
+static const int cbSymbolCount = 25;
+enum cbSymbol
+{
+    // Character and string type definitions
+    cbSymbol_NumChar,
+    cbSymbol_AlphaChar,
+    cbSymbol_AlphaNumChar,
+    cbSymbol_AlphaString,
+    cbSymbol_NumString,
+    cbSymbol_AlphaNumString,
+    cbSymbol_ID,
+    
+    // Basic Structures
+    // All production rules should derive from here
+    cbSymbol_Line,
+    cbSymbol_Statements,
+    cbSymbol_Statement,
+    cbSymbol_Declaration,
+    
+    // Statements
+    cbSymbol_StatementIf,
+    cbSymbol_StatementElif,
+    cbSymbol_StatementElse,
+    cbSymbol_StatementWhile,
+    cbSymbol_StatementFor,
+    cbSymbol_StatementGoto,
+    cbSymbol_StatementLabel,
+    
+    // Expressions
+    cbSymbol_Bool,
+    cbSymbol_Join,
+    cbSymbol_Equality,
+    cbSymbol_Expression,
+    cbSymbol_Term,
+    cbSymbol_Unary,
+    cbSymbol_Factor,
+};
+
+/*** Data-Types Definition ***/
 
 // Data types
 typedef enum __cbType
@@ -95,6 +142,14 @@ typedef struct __cbVirtualMachine
      
      LOW ADDRESS
      
+     Graphical memory is allocated as its own seperate chunk:
+     Total byte count: (width * height) / 4, since 4 pixels in one byte
+     +--------+
+     |        |
+     | Screen | <-- Origin is bottom-left, 2-bits per pixel
+     |        |
+     +--------+
+     
      */
     
     // Stack memory [Array of unsigned bytes]
@@ -114,6 +169,7 @@ typedef struct __cbVirtualMachine
     
     // Screen dimensions
     size_t ScreenWidth, ScreenHeight;
+    unsigned char* ScreenBuffer;
     
     // List of all queued screen-write commands
     // Each element in the array is three unsigned-ints, the first two being the

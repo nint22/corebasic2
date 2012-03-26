@@ -51,10 +51,10 @@ __cbEXPORT void cbGetVersion(unsigned int* Major, unsigned int* Minor);
 /*** Operator Helpers ***/
 
 // The higher the number, the more important it is (i.e. the higher priority it has)
-int cbOp_Precedence(const char* String, size_t StringLength);
+int cbLang_OpPrecedence(const char* String, size_t StringLength);
 
 // Returns true if left-to-right associative
-bool cbOp_LeftAssoc(const char* String, size_t StringLength);
+bool cbLang_OpLeftAssoc(const char* String, size_t StringLength);
 
 /*** Validation Functions ***/
 
@@ -81,6 +81,17 @@ bool cbLang_IsVariable(const char* String, size_t StringLength);
 
 // Returns true if the given string is a reserved key-word
 bool cbLang_IsReserved(const char* String, size_t StringLength);
+
+/*** cbList Comparison Functions ***/
+
+// Given two objects (integers), return true if they are the same
+bool cbList_CompareInt(void* A, void* B);
+
+// Given two pointers to strings, return true if they length-wise match (case sensitive)
+bool cbList_CompareString(void* A, void* B);
+
+// Given two pointers, return true if they point to the same address
+bool cbList_ComparePointer(void* A, void* B);
 
 /*** Error Helpers ***/
 
