@@ -12,48 +12,50 @@
 
 void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
 {
-    // Save the last address, just incase we try to read past that
-    const char* ActiveLine = Program;
+    // Keep an active token pointer; this changes over time
+    const char* ActiveToken = Program;
+    size_t TokenLength = 0;
     
     // The line we are on
     size_t LineCount = 1;
     
     // Keep parsing until done
-    while(ActiveLine != NULL)
+    while(true)
     {
-        /*** Prep. Lines ***/
+        // Get the active token (previous address + previous length)
+        ActiveToken = cbParse_GetToken(ActiveToken + TokenLength, &TokenLength);
         
-        // Grab the first line
-        ActiveLine = strtok(ActiveLine, "\r\n");
-        if(Line == NULL)
+        // If this is the end of the stream, or the token has no length
+        if(ActiveToken == NULL)
             break;
+        
+        // If this is a newline, we grow the line count
+        else if(TokenLength == 1 && ActiveToken[0] == '\n')
+            LineCount++;
+        
+        // Regular token to parse
         else
-            *Code += strlen(*Code) + 1;
-        
-        // If empty line, ignore
-        bool IsEmpty = true;
-        for(int i = 0; i < strlen(Line) && IsEmpty; i++)
         {
-            // Is empty, give up
-            if(isgraph(Line[i]))
-                IsEmpty = false;
+            // Apply production rules
+            
         }
-        
-        if(IsEmpty)
-            continue;
-        
-        // Get the first token of this string
-        size_t FirstTokenLength;
-        const char* FirstToken = cbParse_GetToken(Line, &FirstTokenLength);
-        
-        /*** Special Built-In Functions ***/
-        
+    }
+    
+    // Done parsing
+}
+
+void cbParse_ParseLine(const char* Line, cbList* ErrorList)
+{
+    
 }
 
 void cbParse_CompileProgram(cbList* ErrorList)
 {
     
 }
+
+
+/**** OLD CODE ****/
 
 void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
 {
