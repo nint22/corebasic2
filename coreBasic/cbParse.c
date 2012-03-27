@@ -44,11 +44,11 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
     // Done parsing
 }
 
-void cbParse_ParseLine(const char* Line, cbList* ErrorList)
+/*void cbParse_ParseLine(const char* Line, cbList* ErrorList)
 {
     
 }
-
+*/
 void cbParse_CompileProgram(cbList* ErrorList)
 {
     
