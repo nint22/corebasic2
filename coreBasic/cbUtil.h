@@ -108,6 +108,9 @@ inline char* cbUtil_stralloc(const char* str);
 // As with any object on the heap, it is up to the user to release it
 inline char* cbUtil_strnalloc(const char* str, size_t strlength);
 
+// Returns true if the given string starts with a double-slash c-style comment
+inline bool cbUtil__IsComment(const char* str);
+
 // Min/max integer functions
 inline int g2Util_imin(int a, int b);
 inline int g2Util_imax(int a, int b);

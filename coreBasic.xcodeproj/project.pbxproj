@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		060F30041523A9690064F7D4 /* example10.cb in CopyFiles */ = {isa = PBXBuildFile; fileRef = 060F30021523A9590064F7D4 /* example10.cb */; };
 		06136906151FEF0F0094CCF7 /* cbParse.c in Sources */ = {isa = PBXBuildFile; fileRef = 06136905151FEF0F0094CCF7 /* cbParse.c */; };
 		068B2767151C05BC006F153F /* cbUtil.c in Sources */ = {isa = PBXBuildFile; fileRef = 068B2766151C05BC006F153F /* cbUtil.c */; };
 		4879353A14D49975006A3CAD /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 4879353914D49975006A3CAD /* main.c */; };
@@ -31,6 +32,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 16;
 			files = (
+				060F30041523A9690064F7D4 /* example10.cb in CopyFiles */,
 				48EF3CEE14D4E36700E92FF3 /* example9.cb in CopyFiles */,
 				48EF3CEC14D4B1C100E92FF3 /* example8.cb in CopyFiles */,
 				48EF3CE314D49CA000E92FF3 /* example1.cb in CopyFiles */,
@@ -46,6 +48,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		060F30021523A9590064F7D4 /* example10.cb */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = example10.cb; path = coreBasic/example10.cb; sourceTree = "<group>"; };
 		06136903151FEF090094CCF7 /* cbParse.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cbParse.h; sourceTree = "<group>"; };
 		06136905151FEF0F0094CCF7 /* cbParse.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cbParse.c; sourceTree = "<group>"; };
 		068B2766151C05BC006F153F /* cbUtil.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; lineEnding = 0; path = cbUtil.c; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
@@ -145,6 +148,7 @@
 				4879354D14D499CF006A3CAD /* example7.cb */,
 				48EF3CEB14D4B16C00E92FF3 /* example8.cb */,
 				48EF3CED14D4E31500E92FF3 /* example9.cb */,
+				060F30021523A9590064F7D4 /* example10.cb */,
 			);
 			name = Examples;
 			sourceTree = "<group>";

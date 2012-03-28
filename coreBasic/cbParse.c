@@ -42,6 +42,10 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
         }
     }
     
+    // If the local stack is not empty, then there is a dangling end-block
+    if(cbList_GetCount(&SymbolsTable.LocalStack) > 0)
+        cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
+    
     // Done parsing
 }
 
@@ -71,26 +75,32 @@ void cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, size_t Li
     }
     
     // Debugging
-    printf("Line %lu: (%lu tokens)\n", LineCount, cbList_GetCount(&Tokens));
+    printf("Line %lu: (%lu tokens)\n\t", LineCount, cbList_GetCount(&Tokens));
     for(int i = 0; i < cbList_GetCount(&Tokens); i++)
-        printf("\"%s\", ", cbList_GetElement(&Tokens, i));
+        printf("'%s', ", cbList_GetElement(&Tokens, i));
     printf("\n");
     // Debugging
     
-    // Line production rule:
-    // Line -> {Statement | Declaration}, but if we have an active conditional stack, validate elif, else, and end product ruels
-    if(!cbParse_IsDeclaration(&Tokens, SymbolsTable, LineCount, ErrorList) && !cbParse_IsStatement(&Tokens, SymbolsTable, LineCount, ErrorList))
-        cbParse_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
-    
-    // Release the tokens
-    while(cbList_GetCount(&Tokens) > 0)
-        free(cbList_PopFront(&Tokens));
+    // Only process if there are tokens
+    if(cbList_GetCount(&Tokens) > 0)
+    {
+        // Line production rule:
+        // Line -> {Statement | Declaration}, but if we have an active conditional stack, validate elif, else, and end product ruels
+        if(!cbParse_IsDeclaration(&Tokens, SymbolsTable, LineCount, ErrorList) && !cbParse_IsStatement(&Tokens, SymbolsTable, LineCount, ErrorList))
+            cbParse_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
+        
+        // Release the tokens
+        while(cbList_GetCount(&Tokens) > 0)
+            free(cbList_PopFront(&Tokens));
+    }
 }
 
 bool cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
     // Statement production rule:
     // Statement -> {StatementIf? | StatementWhile? | StatementFor? | StatementGoto? | StatementLabel? | Expression}
+    // Note: Order is important, because if we don't check for if and while before checking for functions, the
+    // expression product will sudgest that a "while(something)" looks like a function call
     
     // Special rule: if the local stack is non-zero (i.e. we are within a coditional block), look for
     // both If, Elif, Else, and End statements
@@ -123,7 +133,7 @@ bool cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t Li
 bool cbParse_IsDeclaration(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
     // Declaration production rule:
-    // Declaration -> {ID = ID | ID = NumString? | ID = Expression}
+    // Declaration -> {ID = Expression}
     
     // Must have a minimum of three or more tokens
     if(cbList_GetCount(Tokens) < 3)
@@ -139,31 +149,12 @@ bool cbParse_IsDeclaration(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t 
     if(strlen(AssignmentOp) != 1 || AssignmentOp[0] != '=')
         return false;
     
-    // Third token may be either an ID or a NumString
-    if(cbList_GetCount(Tokens) == 3)
-    {
-        // Get last token
-        char* SourceToken = cbList_GetElement(Tokens, 2);
-        size_t TokenLength = strlen(SourceToken);
-        
-        // Either is an ID or a number
-        if(cbParse_IsID(SourceToken, TokenLength) || cbParse_IsNumString(SourceToken, TokenLength))
-            return true;
-    }
-    // Possible expression
-    else
-    {
-        // Get all expressions into their own list
-        cbList ExpressionTokens;
-        cbList_Subset(Tokens, &ExpressionTokens, 2, cbList_GetCount(Tokens) - 2);
-        
-        // If is expression, valid
-        if(cbParse_IsExpression(&ExpressionTokens, SymbolsTable, LineCount, ErrorList))
-           return true;
-    }
+    // The rest is assumed an expression
+    cbList ExpressionTokens;
+    cbList_Subset(Tokens, &ExpressionTokens, 2, cbList_GetCount(Tokens) - 2);
     
-    // No match found of the last elements, failed
-    return false;
+    // If is expression, valid
+    return cbParse_IsExpression(&ExpressionTokens, SymbolsTable, LineCount, ErrorList);
 }
 
 bool cbParse_IsID(const char* Token, size_t TokenLength)
@@ -237,7 +228,7 @@ bool cbParse_IsStatementIf(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t 
     // Second and last token should always be '(' and ')' respectivly
     char* FirstParenth = cbList_GetElement(Tokens, 1);
     char* LastParenth = cbList_PeekBack(Tokens);
-    if(strlen(FirstParenth) != 1 || FirstParenth[0] != '(' || strlen(LastParenth) != 1 || LastParenth[0] != ')')
+    if(strcmp(FirstParenth, "(") != 0 || strcmp(LastParenth, ")") != 0)
         return false;
     
     // Pase the boolean expression within the parenth
@@ -276,19 +267,15 @@ bool cbParse_IsStatementElif(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_
     // Second and last token should always be '(' and ')' respectivly
     char* FirstParenth = cbList_GetElement(Tokens, 1);
     char* LastParenth = cbList_PeekBack(Tokens);
-    if(strlen(FirstParenth) != 1 || FirstParenth[0] != '(' || strlen(LastParenth) != 1 || LastParenth[0] != ')')
+    if(strcmp(FirstParenth, "(") != 0 || strcmp(LastParenth, ")") != 0)
         return false;
     
     // Pase the boolean expression within the parenth
-    cbList Bool;
-    cbList_Subset(Tokens, &Bool, 2, cbList_GetCount(Tokens) - 3);
+    cbList BoolSubset;
+    cbList_Subset(Tokens, &BoolSubset, 2, cbList_GetCount(Tokens) - 3);
     
     // Boolean expression must be valid
-    if(!cbParse_IsBool(Tokens, SymbolsTable, LineCount, ErrorList))
-        return false;
-    
-    // Good to go
-    return true;
+    return cbParse_IsBool(&BoolSubset, SymbolsTable, LineCount, ErrorList);
 }
 
 bool cbParse_IsStatementElse(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
@@ -304,13 +291,9 @@ bool cbParse_IsStatementElse(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_
     if(cbList_GetCount(Tokens) != 1)
         return false;
     
-    // Get the token
+    // Get the token; only a true else if string match
     char* Token = cbList_PeekFront(Tokens);
-    if(strcmp(Token, "else") == 0)
-        return true;
-    
-    // Else, not an end line
-    return false;
+    return (strcmp(Token, "else") == 0);
 }
 
 bool cbParse_IsStatementEnd(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
@@ -337,13 +320,70 @@ bool cbParse_IsStatementEnd(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t
 
 bool cbParse_IsStatementWhile(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
-    // TODO
+    // While production rule:
+    // StatementWhile -> {while(Bool) Lines end}
+    
+    // If it is at least four tokens: "while", parent-pair, and the bool-arg
+    size_t TokenCount = cbList_GetCount(Tokens);
+    if(TokenCount >= 4)
+    {
+        // Make sure it is "while" and parenth group
+        char* ID = cbList_PeekFront(Tokens);
+        char* StartParenth = cbList_GetElement(Tokens, 1);
+        char* EndParenth = cbList_PeekBack(Tokens);
+        if(strcmp(ID, "while") == 0 && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
+        {
+            // Make sure that the subset is a boolean expression
+            cbList ExpressionList;
+            cbList_Subset(Tokens, &ExpressionList, 2, TokenCount - 3);
+            if(cbParse_IsBool(&ExpressionList, SymbolsTable, LineCount, ErrorList))
+            {
+                // Valid, and we are starting a new local stack
+                cbList_PushBack(&SymbolsTable->LocalStack, NULL);
+                return true;
+            }
+        }
+    }
+    
+    // Failed
     return false;
 }
 
 bool cbParse_IsStatementFor(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
-    // TODO
+    // For production rule:
+    // StatementFor -> {for(ID, Expression, Expression, Expression) Lines end}
+    
+    // If it is at least 10 tokens: "for", parenth-pair, comma delimiters, and each arg
+    size_t TokenCount = cbList_GetCount(Tokens);
+    if(TokenCount >= 10)
+    {
+        // Make sure it is "for" and parenth group
+        char* ID = cbList_PeekFront(Tokens);
+        char* StartParenth = cbList_GetElement(Tokens, 1);
+        char* EndParenth = cbList_PeekBack(Tokens);
+        if(strcmp(ID, "for") == 0 && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
+        {
+            // The first param must be an ID followed by a comma
+            char* LoopID = cbList_GetElement(Tokens, 2);
+            char* CommaID = cbList_GetElement(Tokens, 3);
+            if(cbParse_IsID(LoopID, strlen(LoopID)) && strcmp(CommaID, ",") == 0)
+            {
+                // Create a subset of the tokens left
+                cbList Subset;
+                cbList_Subset(Tokens, &Subset, 4, TokenCount - 5);
+                size_t SubsetCount = cbList_GetCount(&Subset);
+                
+                // If this is a valid expressions list and it is only three expressions...
+                size_t ExpressionCount;
+                // We NEED to know how many sub-args are at this point
+                // Thus, we need to have the actual parse tree built at this point
+                return false;
+            }
+        }
+    }
+    
+    // Failed
     return false;
 }
 
@@ -405,15 +445,16 @@ bool cbParse_IsExpression(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t L
      Equality -> {Expression == Expression | Expression != Expression | Expression < Expression | Expression <= Expression | Expression > Expression | Expression >= Expression}
     */
     
-    // If it is at least three operators, check if we can apply the function product "ID(ExpressionList)"
+    // Function-call validation:
+    // If it is at least four operators, check if we can apply the function product "ID(ExpressionList)"
     size_t TokenCount = cbList_GetCount(Tokens);
-    if(TokenCount >= 3)
+    if(TokenCount >= 4)
     {
         // Make sure it is an ID and parenth group
         char* ID = cbList_PeekFront(Tokens);
         char* StartParenth = cbList_GetElement(Tokens, 1);
-        char* EndParent = cbList_PeekBack(Tokens);
-        if(cbParse_IsID(ID, strlen(ID)) && strlen(StartParenth) == 1 && StartParenth[0] == '(' && strlen(EndParent) == 1 && EndParent[0] == ')')
+        char* EndParenth = cbList_PeekBack(Tokens);
+        if(cbParse_IsID(ID, strlen(ID)) && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
         {
             // Make sure that the subset is an expression list
             cbList ExpressionList;
@@ -485,9 +526,14 @@ bool cbParse_IsFactor(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineC
     
     // Check boolean expression (but requires parenth surround)
     char* StartParenth = cbList_PeekFront(Tokens);
-    char* EndParent = cbList_PeekBack(Tokens);
-    if(strlen(StartParenth) == 1 && StartParenth[0] == '(' && strlen(EndParent) == 1 && EndParent[0] == ')')
-        return cbParse_IsBool(Tokens, SymbolsTable, LineCount, ErrorList);
+    char* EndParenth = cbList_PeekBack(Tokens);
+    if(strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
+    {
+        // Pass without the parenth-pair
+        cbList Subset;
+        cbList_Subset(Tokens, &Subset, 1, cbList_GetCount(Tokens) - 2);
+        return cbParse_IsBool(&Subset, SymbolsTable, LineCount, ErrorList);
+    }
     
     // Else, all failed
     return false;
@@ -514,10 +560,10 @@ bool cbParse_IsJoin(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCou
 bool cbParse_IsEquality(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
     // Equality product rule:
-    // Equality -> {Expression == Expression | Expression != Expression | Expression < Expression | Expression <= Expression | Expression > Expression | Expression >= Expression}
+    // Equality -> {Expression == Expression | Expression != Expression | Expression < Expression | Expression <= Expression | Expression > Expression | Expression >= Expression | Expression}
     
     char* Operators[] = { "==", "!=", "<", "<=", ">", ">=" };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsExpression, NULL, Operators, 6);
+    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsExpression, cbParse_IsExpression, Operators, 6);
 }
 
 const char* cbParse_GetToken(const char* String, size_t* TokenLength)
@@ -526,13 +572,13 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
     size_t Start, End;
     size_t StringLength = strlen(String);
     
-    // Keep skipping white spaces except for new-lines
+    // Keep skipping white spaces except for new-lines or comments
     for(Start = 0; Start < StringLength; Start++)
         if(String[Start] == '\n' || !isspace(String[Start]))
             break;
     
     // If end of string
-    if(String[Start] == '\0')
+    if(String[Start] == '\0' || cbUtil__IsComment(String + Start))
         return NULL;
     
     // If this is a string literal (must be in quotes), seek until next quote
@@ -541,12 +587,14 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
         // Keep searching until the end
         for(End = Start + 1; End < StringLength; End++)
         {
+            // Grow to include last quote
             if(String[End] == '"')
             {
-                // Grow to include last quote
                 End++;
                 break;
             }
+            else if(String[End] == '\n' || cbUtil__IsComment(String + End))
+                break;
         }
     }
     // Else if we hit a boolean operator (of 2-char length)
@@ -560,7 +608,7 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
         End = Start + 1;
     }
     // Special seperators delimiters: comma, colon, new-line, and parenth
-    else if((StringLength - Start) >= 1 && (String[0] == ',' || String[0] == ':' || String[0] == '\n' || String[0] == '(' || String[0] == ')'))
+    else if((StringLength - Start) >= 1 && (String[Start] == ',' || String[Start] == ':' || String[Start] == '\n' || String[Start] == '(' || String[Start] == ')'))
     {
         End = Start + 1;
     }
@@ -569,7 +617,7 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
     {
         // If white space or a special single-char, just stop
         for(End = Start; End < StringLength; End++)
-            if(isspace(String[End]) || !isalnum(String[End]))
+            if(isspace(String[End]) || !isalnum(String[End]) || cbUtil__IsComment(String + Start))
                 break;
     }
     

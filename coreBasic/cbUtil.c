@@ -241,6 +241,18 @@ char* cbUtil_strnalloc(const char* str, size_t strlength)
     return strcopy;
 }
 
+bool cbUtil__IsComment(const char* str)
+{
+    // Ignore if null too early
+    if(str == NULL || str[0] == '\0' || str[1] == '\0')
+        return false;
+    if(str[0] == '/' && str[1] == '/')
+        return true;
+    
+    // Fall through: some other char-pair
+    return false;
+}
+
 int g2Util_imin(int a, int b)
 {
     return (a > b) ? b : a;

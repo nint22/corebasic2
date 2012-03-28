@@ -157,7 +157,7 @@ int main (int argc, const char * argv[])
             printf(">> %lu: %s\n", Error->LineNumber, cbLang_GetErrorMsg(Error->ErrorCode));
             free(Error);
         }
-        
+        fflush(stdout); // Xcode isn't printing out before quitting
         return -1;
     }
     
