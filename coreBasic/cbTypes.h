@@ -370,5 +370,13 @@ typedef struct __cbHighlightToken
     cbTokenType TokenType;
 } cbHighlightToken;
 
+// Internal symbols table for parsing
+typedef struct __cbSymbolsTable
+{
+    // Local stack (loops and conditionals)
+    cbList LocalStack;
+    
+} cbSymbolsTable;
+
 // End of inclusion guard
 #endif

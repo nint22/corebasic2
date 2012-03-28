@@ -98,7 +98,7 @@ bool cbLang_IsFunction(const char* String, size_t StringLength)
 bool cbLang_IsOp(const char* String, size_t StringLength)
 {
     // Coalesced code; always a valid op if 0 or precedence rank
-    return cbLang_OpLeftAssoc(String, StringLength) >= 0;
+    return cbLang_OpPrecedence(String, StringLength) >= 0;
 }
 
 bool cbLang_IsFloat(const char* String, size_t StringLength)
@@ -236,7 +236,17 @@ char* cbUtil_strnalloc(const char* str, size_t strlength)
     // String length used for size alloc and copy
     char* strcopy = malloc(strlength + 1);
     strncpy(strcopy, str, strlength);
-    strcopy[strlength + 1] = '\0';
+    strcopy[strlength] = '\0';
     
     return strcopy;
+}
+
+int g2Util_imin(int a, int b)
+{
+    return (a > b) ? b : a;
+}
+
+int g2Util_imax(int a, int b)
+{
+    return (a > b) ? a : b;
 }

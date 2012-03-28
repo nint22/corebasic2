@@ -177,7 +177,7 @@ void* cbList_GetElement(cbList* List, int Index)
 bool cbList_Subset(cbList* List, cbList* Subset, int Index, int n)
 {
     // Bounds check
-    if(Index < 0 || Index >= List->Count || Index + n >= List->Count)
+    if(Index < 0 || Index >= List->Count || Index + n > List->Count)
         return false;
     
     // Create a new list that is our subset

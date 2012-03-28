@@ -1,5 +1,5 @@
 a = 0
-label test
+label test:
   a = a + 1
   disp(a)
   disp("\n")

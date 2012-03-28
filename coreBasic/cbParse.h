@@ -18,6 +18,10 @@
 #include "cbUtil.h"
 #include "cbTypes.h"
 
+// Define a macro that helps inturn define function pointers
+// This is used heavily when doing production evaluation with the CFG
+#define __cbParse_IsProduct(x) bool (x)(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+
 /*** Main Lexical and Compiler Entry Points ***/
 
 // Main parsing function; the root of all parsing events
@@ -30,13 +34,13 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList);
 
 // Parse a given line of text, up to the end of the buffer or newline
 // Any erorrs are posted into the given error list
-void cbParse_ParseLine(const char* Line, size_t LineCount, cbList* ErrorList);
+void cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if the given line (represented by tokens) is a statement
-bool cbParse_IsStatement(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if the given line (represented by tokens) is a declaraton
-bool cbParse_IsDeclaration(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsDeclaration(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if the given token is an ID
 bool cbParse_IsID(const char* Token, size_t TokenLength);
@@ -45,22 +49,49 @@ bool cbParse_IsID(const char* Token, size_t TokenLength);
 bool cbParse_IsNumString(const char* Token, size_t TokenLength);
 
 // Returns true if it is the start of a conditional block
-bool cbParse_IsStatementIf(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsStatementIf(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Return true if it is the continuation of a conditional block
+bool cbParse_IsStatementElif(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Return true if it is the last condition of a conditional block
+bool cbParse_IsStatementElse(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Return true if it is the end of a block
+bool cbParse_IsStatementEnd(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if it is the start of a while block
-bool cbParse_IsStatementWhile(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsStatementWhile(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if it is the start of a for block
-bool cbParse_IsStatementFor(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsStatementFor(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if it a goto statement
-bool cbParse_IsStatementGoto(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsStatementGoto(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if it is a label statement
-bool cbParse_IsStatementLabel(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsStatementLabel(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns true if it is a valid expression
-bool cbParse_IsExpression(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+bool cbParse_IsExpression(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a valid term
+bool cbParse_IsTerm(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a valid unary
+bool cbParse_IsUnary(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a valid factor
+bool cbParse_IsFactor(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a valid bool (product from the formal cBasic CFG, NOT if it is a bool-string)
+bool cbParse_IsBool(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a valid join
+bool cbParse_IsJoin(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a given equality
+bool cbParse_IsEquality(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
 // Returns a token from the string
 // Ignores all C-style double-slash comment structures until the newline
@@ -69,42 +100,14 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength);
 
 /*** Helper Functions ***/
 
+// Generic rule-applying function for binary rules (i.e. a -> {a + b | a - b | [optional c]}) with
+// an optional "fall-through" rule. Given a list of tokens, and an array of operators to
+// do the binary comparisons with, and the left and right symbols. Returns true if a
+// valid recursive call of the rules
+bool cbParse_IsBinaryProduction(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList, __cbParse_IsProduct(SymbolA), __cbParse_IsProduct(SymbolB), __cbParse_IsProduct(SymbolC), char** DelimList, size_t DelimCount);
+
 // Error reporting associated with code compiling
 void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber);
-
-#ifdef __cBASIC9__
-
-// Parses a block of code, calling itself recursively for each new block, so that
-// control code (i.e. for-loops and while-loops) do not intersect or collide
-// Note that the StackDepth variable is to maintain correct block count
-cbError cbParse_ParseBlock(char** Code, cbList* InstructionsList, cbList* DataList, cbList* VariablesList, cbList* JumpTable, cbList* LabelTable, int StackDepth);
-
-// Parses a line of code, applying basic interpreter code
-cbError cbParse_ParseLine(char* Line, cbList* InstructionsList, cbList* DataList, cbList* VariablesList, cbList* JumpTable);
-
-// Given an expression (string of characters), parse using the Shunting-Yard algorithm:
-// en.wikipedia.org/wiki/Shunting-yard_algorithm
-// Returns an error state, or no error and posts a reverse polish notation of
-// the expression as heap-allocated strings
-cbError cbParse_ParseExpression(const char* Expression, cbList* OutputBuffer);
-
-// Given a for loop function, pull out each expression and validate the structure of the for-loop function
-// Note that this function internally allocates strings and will return a string that needs to be released explicitly
-cbError cbParse_ParseFor(const char* Expression, char** IteratorExp, char** MinExp, char** MaxExp, char** IncrementExp);
-
-/*** Instruction-Parsing and Generation Wrappers ***/
-
-// Save a given variable token into the variables list (if needed) and push the load variable command
-cbError cbLang_LoadVariable(cbList* InstructionsList, cbList* VariablesList, char* Token, size_t TokenLength);
-
-// Save a given literal (string, float, integer, boolean, etc.) into the data list (if needed) and push the load literal command
-cbError cbLang_LoadLiteral(cbList* InstructionsList, cbList* DataList, char* Token, size_t TokenLength);
-
-// Push the relative op into the instructions list
-cbError cbLang_LoadOp(cbList* InstructionsList, char* Token, size_t TokenLength);
-
-// End of old code
-#endif
 
 // End if inclusion guard
 #endif
