@@ -27,7 +27,7 @@
 
 // Symbols list
 static const int cbSymbolCount = 25;
-enum cbSymbol
+typedef enum __cbSymbol
 {
     // Character and string type definitions
     cbSymbol_NumChar,
@@ -62,13 +62,9 @@ enum cbSymbol
     cbSymbol_Term,
     cbSymbol_Unary,
     cbSymbol_Factor,
-};
+} cbSymbol;
 
-/*** Lexical / Symbol-Products Tree ***/
-
-
-
-/*** Data-Types Definition ***/
+/*** Variable Type Definition ***/
 
 // Data types
 typedef enum __cbType
@@ -93,6 +89,45 @@ typedef struct __cbVariable
         int Offset;
     } Data;
 } cbVariable;
+
+
+/*** Lexical / Symbol-Products Tree ***/
+
+// Internal symbols table for parsing
+typedef struct __cbSymbolsTable
+{
+    // Local stack (loops and conditionals)
+    cbList LocalStack;
+    
+} cbSymbolsTable;
+
+// Define the types of lexical-analysis nodes in a lex-tree
+typedef enum __cbLexNodeType
+{
+    cbLexNodeType_Symbol,   // Defines a Symbol -> Product relationship
+    cbLexNodeType_Terminal, // Define a Product -> Terminal relationship
+} cbLexNodeType;
+
+// Define
+typedef struct __cbLexNode
+{
+    // What kind of lex-node is this?
+    cbLexNodeType Type;
+    
+    // Lex content
+    union // Anonymous
+    {
+        cbSymbol Symbol;
+        cbVariable Terminal;
+    } Data;
+    
+    // Left and right nodes in our binary tree
+    struct __cbLexNode* Left;
+    struct __cbLexNode* Right;
+    
+} cbLexNode;
+
+/*** Machine / Simulation Definition ***/
 
 // Interrupt types (only three actual interrupts, one "none")
 static const int cbInterruptCount = 4;
@@ -289,6 +324,8 @@ static const char cbOpsNames[cbOpsCount][16] =
     "nop",
 };
 
+/*** Error Reporting ***/
+
 // Failure reasons
 // Note that these are both parsing, compiling,
 // and run-time error definitions
@@ -347,13 +384,7 @@ typedef struct __cbParseError
     
 } cbParseError;
 
-// A helper data structure to track all labels and their addresses,
-// used in the jump table at the end of block processing
-typedef struct __cbLabel
-{
-    int Index;
-    char Label[128];
-} __cbLabel; // Note: kept private
+/*** Syntax Highlighting ***/
 
 // Define all possible token types
 static const int cbTokenTypeCount = 6;
@@ -373,14 +404,6 @@ typedef struct __cbHighlightToken
     size_t Start, Length;
     cbTokenType TokenType;
 } cbHighlightToken;
-
-// Internal symbols table for parsing
-typedef struct __cbSymbolsTable
-{
-    // Local stack (loops and conditionals)
-    cbList LocalStack;
-    
-} cbSymbolsTable;
 
 // End of inclusion guard
 #endif
