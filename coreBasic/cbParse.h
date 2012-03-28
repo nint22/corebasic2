@@ -75,6 +75,9 @@ bool cbParse_IsStatementLabel(cbList* Tokens, cbSymbolsTable* SymbolsTable, size
 // Returns true if it is a valid expression
 bool cbParse_IsExpression(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 
+// Returns true if it is a valid expression list (an empty list is accepted)
+bool cbParse_IsExpressionList(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
+
 // Returns true if it is a valid term
 bool cbParse_IsTerm(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList);
 

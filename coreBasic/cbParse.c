@@ -80,20 +80,7 @@ void cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, size_t Li
     // Line production rule:
     // Line -> {Statement | Declaration}, but if we have an active conditional stack, validate elif, else, and end product ruels
     if(!cbParse_IsDeclaration(&Tokens, SymbolsTable, LineCount, ErrorList) && !cbParse_IsStatement(&Tokens, SymbolsTable, LineCount, ErrorList))
-    {
-        // Active conditional, so check for elif, else, or end
-        if(cbList_GetCount(&SymbolsTable->LocalStack) > 0)
-        {
-            // Validate expressions
-            if(!cbParse_IsStatementElif(&Tokens, SymbolsTable, LineCount, ErrorList) &&
-               !cbParse_IsStatementElse(&Tokens, SymbolsTable, LineCount, ErrorList) &&
-               !cbParse_IsStatementEnd(&Tokens, SymbolsTable, LineCount, ErrorList))
-                cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
-        }
-        // Else, this is a line-parsing failure
-        else
-            cbParse_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
-    }
+        cbParse_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
     
     // Release the tokens
     while(cbList_GetCount(&Tokens) > 0)
@@ -104,16 +91,24 @@ bool cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t Li
 {
     // Statement production rule:
     // Statement -> {StatementIf? | StatementWhile? | StatementFor? | StatementGoto? | StatementLabel? | Expression}
+    
+    // Special rule: if the local stack is non-zero (i.e. we are within a coditional block), look for
+    // both If, Elif, Else, and End statements
+    size_t LocalStackDepth = cbList_GetCount(&SymbolsTable->LocalStack);
+    
+    // Apply all production rules...
     if(cbParse_IsStatementIf(Tokens, SymbolsTable, LineCount, ErrorList))
         return true;
+    else if(LocalStackDepth > 0 && cbParse_IsStatementElif(Tokens, SymbolsTable, LineCount, ErrorList))
+        return true;
+    else if(LocalStackDepth > 0 && cbParse_IsStatementElse(Tokens, SymbolsTable, LineCount, ErrorList))
+        return true;
+    else if(LocalStackDepth > 0 && cbParse_IsStatementEnd(Tokens, SymbolsTable, LineCount, ErrorList))
+        return true;
     else if(cbParse_IsStatementWhile(Tokens, SymbolsTable, LineCount, ErrorList))
-    {
-        // TODO
-    }
+        return true;
     else if(cbParse_IsStatementFor(Tokens, SymbolsTable, LineCount, ErrorList))
-    {
-        // TODO
-    }
+        return true;
     else if(cbParse_IsStatementGoto(Tokens, SymbolsTable, LineCount, ErrorList))
         return true;
     else if(cbParse_IsStatementLabel(Tokens, SymbolsTable, LineCount, ErrorList))
@@ -400,50 +395,51 @@ bool cbParse_IsExpression(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t L
     // Expressions production are the largest, but not complex, group
     // Expression prodction rules:
     /*
-     Expression -> {Expression + Term | Expression - Term | Term}
+     Expression -> {Expression + Term | Expression - Term | ID(ExpressionList) | Term}
+     ExpressionList -> {ExpressionList, Expression | Expression | Empty}
      Term -> {Term * Unary | Term / Unary | Term % Unary | Unary}
      Unary -> {!Unary | -Unary | Factor}
-     Factor -> {(bool) | ID | 'true' | 'false'}
+     Factor -> {(bool) | ID | 'true' | 'false' | IntString? | Float | String Literal}
      Bool -> {Bool or Join | Join}
      Join -> {Join and Equality | Equality}
      Equality -> {Expression == Expression | Expression != Expression | Expression < Expression | Expression <= Expression | Expression > Expression | Expression >= Expression}
     */
     
-    char* Operators[] = { "+", "-" };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsTerm, cbParse_IsTerm, Operators, 2);
-    
-    /*
-    // Number of tokens
+    // If it is at least three operators, check if we can apply the function product "ID(ExpressionList)"
     size_t TokenCount = cbList_GetCount(Tokens);
-    bool IsValid = false;
-    
-    // Can we separate this expression into the first product rule?
-    for(int i = 1; i < TokenCount - 1; i++)
+    if(TokenCount >= 3)
     {
-        char* Token = cbList_GetElement(Tokens, i);
-        if(strlen(Token) == 1 && (Token[0] == '+' || Token[0] == '-'))
+        // Make sure it is an ID and parenth group
+        char* ID = cbList_PeekFront(Tokens);
+        char* StartParenth = cbList_GetElement(Tokens, 1);
+        char* EndParent = cbList_PeekBack(Tokens);
+        if(cbParse_IsID(ID, strlen(ID)) && strlen(StartParenth) == 1 && StartParenth[0] == '(' && strlen(EndParent) == 1 && EndParent[0] == ')')
         {
-            // Generate an expressions and term list
-            int LeftEnd = i - 1;
-            int RightStart = i + 1;
-            
-            cbList LeftList, RightList;
-            cbList_Subset(Tokens, &LeftList, 0, LeftEnd + 1);
-            cbList_Subset(Tokens, &RightList, RightStart, TokenCount - RightStart);
-            
-            // Validate "Expression + Term" or "Expression - Term"
-            IsValid = cbParse_IsExpression(&LeftList, SymbolsTable, LineCount, ErrorList) && cbParse_IsTerm(&RightList, SymbolsTable, LineCount, ErrorList);
+            // Make sure that the subset is an expression list
+            cbList ExpressionList;
+            cbList_Subset(Tokens, &ExpressionList, 2, TokenCount - 3);
+            if(cbParse_IsExpressionList(&ExpressionList, SymbolsTable, LineCount, ErrorList))
+                return true;
         }
     }
     
-    // We can't form a valid result using either of the first two products,
-    // so validate this as a pure term
-    if(!IsValid)
-        IsValid = cbParse_IsTerm(Tokens, SymbolsTable, LineCount, ErrorList);
-    */
+    // Else, just check for regular production rules (with the fall-through case)
+    char* Operators[] = { "+", "-" };
+    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsTerm, cbParse_IsTerm, Operators, 2);
+}
+
+bool cbParse_IsExpressionList(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+{
+    // Expression list product rule:
+    // ExpressionList -> {ExpressionList, Expression | Expression | Empty}
     
-    // All done
-    //return IsValid;
+    // If empty, that is fine
+    if(cbList_GetCount(Tokens) <= 0)
+        return true;
+    
+    // Else, attempt to apply the production rule
+    char* Operators[] = { "," };
+    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpressionList, cbParse_IsExpression, cbParse_IsExpression, Operators, 1);
 }
 
 bool cbParse_IsTerm(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
@@ -451,36 +447,8 @@ bool cbParse_IsTerm(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCou
     // Term Product rule:
     // Term -> {Term * Unary | Term / Unary | Term % Unary | Unary}
     
-    // Number of tokens
-    size_t TokenCount = cbList_GetCount(Tokens);
-    bool IsValid = false;
-    
-    // Can we separate this expression into the first product rule?
-    for(int i = 1; i < TokenCount - 1; i++)
-    {
-        char* Token = cbList_GetElement(Tokens, i);
-        if(strlen(Token) == 1 && (Token[0] == '*' || Token[0] == '/' || Token[0] == '%'))
-        {
-            // Generate an expressions and term list
-            int LeftEnd = g2Util_imax(0, i - 1);
-            int RightStart = g2Util_imin(i + 1, TokenCount - 1);
-            
-            cbList LeftList, RightList;
-            cbList_Subset(Tokens, &LeftList, 0, LeftEnd);
-            cbList_Subset(Tokens, &RightList, RightStart, TokenCount - RightStart);
-            
-            // Validate "Expression + Term" or "Expression - Term"
-            IsValid = cbParse_IsTerm(&LeftList, SymbolsTable, LineCount, ErrorList) && cbParse_IsUnary(&RightList, SymbolsTable, LineCount, ErrorList);
-        }
-    }
-    
-    // We can't form a valid result using either of the first two products,
-    // so validate this as a pure term
-    if(!IsValid)
-        IsValid = cbParse_IsUnary(Tokens, SymbolsTable, LineCount, ErrorList);
-    
-    // All done
-    return IsValid;
+    char* Operators[] = { "*", "/", "%" };
+    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsTerm, cbParse_IsUnary, cbParse_IsUnary, Operators, 3);
 }
 
 bool cbParse_IsUnary(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
@@ -505,13 +473,14 @@ bool cbParse_IsUnary(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCo
 bool cbParse_IsFactor(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
     // Factor product rule:
-    // Factor -> {(bool) | ID | 'true' | 'false'}
+    // Factor -> {(bool) | ID | 'true' | 'false' | IntString? | Float | "String Literal"}
     
-    // Either is an ID, true or false
+    // Either is an ID, true or false, an integer, flaot, or string literal
     if(cbList_GetCount(Tokens) == 1)
     {
         char* Token = cbList_PeekFront(Tokens);
-        return cbParse_IsID(Token, strlen(Token)) || cbParse_IsNumString(Token, strlen(Token));
+        size_t TokenLength = strlen(Token);
+        return cbParse_IsID(Token, TokenLength) || cbParse_IsNumString(Token, TokenLength) || cbLang_IsString(Token, TokenLength);
     }
     
     // Check boolean expression (but requires parenth surround)
@@ -529,36 +498,8 @@ bool cbParse_IsBool(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCou
     // Bool product rule:
     // Bool -> {Bool or Join | Join}
     
-    // Number of tokens
-    size_t TokenCount = cbList_GetCount(Tokens);
-    bool IsValid = false;
-    
-    // Can we separate this expression into the first product rule?
-    for(int i = 1; i < TokenCount - 1; i++)
-    {
-        char* Token = cbList_GetElement(Tokens, i);
-        if(strlen(Token) == 2 && strcmp(Token, "or") == 0)
-        {
-            // Generate an expressions and term list
-            int LeftEnd = g2Util_imax(0, i - 1);
-            int RightStart = g2Util_imin(i + 1, TokenCount - 1);
-            
-            cbList LeftList, RightList;
-            cbList_Subset(Tokens, &LeftList, 0, LeftEnd);
-            cbList_Subset(Tokens, &RightList, RightStart, TokenCount - RightStart);
-            
-            // Validate "Expression + Term" or "Expression - Term"
-            IsValid = cbParse_IsBool(&LeftList, SymbolsTable, LineCount, ErrorList) && cbParse_IsJoin(&RightList, SymbolsTable, LineCount, ErrorList);
-        }
-    }
-    
-    // We can't form a valid result using either of the first two products,
-    // so validate this as a pure term
-    if(!IsValid)
-        IsValid = cbParse_IsJoin(Tokens, SymbolsTable, LineCount, ErrorList);
-    
-    // All done
-    return IsValid;
+    char* Operators[] = { "or" };
+    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsBool, cbParse_IsJoin, cbParse_IsJoin, Operators, 1);
 }
 
 bool cbParse_IsJoin(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
@@ -566,36 +507,8 @@ bool cbParse_IsJoin(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCou
     // Join product rule:
     // Join -> {Join and Equality | Equality}
     
-    // Number of tokens
-    size_t TokenCount = cbList_GetCount(Tokens);
-    bool IsValid = false;
-    
-    // Can we separate this expression into the first product rule?
-    for(int i = 1; i < TokenCount - 1; i++)
-    {
-        char* Token = cbList_GetElement(Tokens, i);
-        if(strlen(Token) == 3 && strcmp(Token, "and") == 0)
-        {
-            // Generate an expressions and term list
-            int LeftEnd = g2Util_imax(0, i - 1);
-            int RightStart = g2Util_imin(i + 1, TokenCount - 1);
-            
-            cbList LeftList, RightList;
-            cbList_Subset(Tokens, &LeftList, 0, LeftEnd);
-            cbList_Subset(Tokens, &RightList, RightStart, TokenCount - RightStart);
-            
-            // Validate "Expression + Term" or "Expression - Term"
-            IsValid = cbParse_IsJoin(&LeftList, SymbolsTable, LineCount, ErrorList) && cbParse_IsEquality(&RightList, SymbolsTable, LineCount, ErrorList);
-        }
-    }
-    
-    // We can't form a valid result using either of the first two products,
-    // so validate this as a pure term
-    if(!IsValid)
-        IsValid = cbParse_IsEquality(Tokens, SymbolsTable, LineCount, ErrorList);
-    
-    // All done
-    return IsValid;
+    char* Operators[] = { "and" };
+    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsJoin, cbParse_IsEquality, cbParse_IsEquality, Operators, 1);
 }
 
 bool cbParse_IsEquality(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
@@ -603,31 +516,8 @@ bool cbParse_IsEquality(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t Lin
     // Equality product rule:
     // Equality -> {Expression == Expression | Expression != Expression | Expression < Expression | Expression <= Expression | Expression > Expression | Expression >= Expression}
     
-    // Number of tokens
-    size_t TokenCount = cbList_GetCount(Tokens);
-    bool IsValid = false;
-    
-    // Can we separate this expression into the first product rule?
-    for(int i = 1; i < TokenCount - 1; i++)
-    {
-        char* Token = cbList_GetElement(Tokens, i);
-        if((strlen(Token) == 2 && (strcmp(Token, "==") == 0 || strcmp(Token, "!=") == 0 || strcmp(Token, "<=") == 0 || strcmp(Token, ">=") == 0)) || (strlen(Token) == 1 && (Token[0] == '>' || Token[0] == '<')))
-        {
-            // Generate an expressions and term list
-            int LeftEnd = g2Util_imax(0, i - 1);
-            int RightStart = g2Util_imin(i + 1, TokenCount - 1);
-            
-            cbList LeftList, RightList;
-            cbList_Subset(Tokens, &LeftList, 0, LeftEnd);
-            cbList_Subset(Tokens, &RightList, RightStart, TokenCount - RightStart);
-            
-            // Validate "Expression + Term" or "Expression - Term"
-            IsValid = cbParse_IsExpression(&LeftList, SymbolsTable, LineCount, ErrorList) && cbParse_IsExpression(&RightList, SymbolsTable, LineCount, ErrorList);
-        }
-    }
-    
-    // All done
-    return IsValid;
+    char* Operators[] = { "==", "!=", "<", "<=", ">", ">=" };
+    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsExpression, NULL, Operators, 6);
 }
 
 const char* cbParse_GetToken(const char* String, size_t* TokenLength)
@@ -717,7 +607,7 @@ bool cbParse_IsBinaryProduction(cbList* Tokens, cbSymbolsTable* SymbolsTable, si
             for(int j = 0; j < DelimCount && !IsValid; j++)
             {
                 // If we have a match...
-                if(strlen(Token) == 1 && (Token[0] == '+' || Token[0] == '-'))
+                if(strcmp(Token, DelimList[j]) == 0)
                 {
                     // Generate an A (left) and B (right) list
                     int LeftEnd = i - 1;
