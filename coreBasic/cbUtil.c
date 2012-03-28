@@ -219,3 +219,24 @@ const char* const cbLang_GetErrorMsg(cbError ErrorCode)
 {
     return cbErrorNames[ErrorCode];
 }
+
+char* cbUtil_stralloc(const char* str)
+{
+    if(str == NULL)
+        return NULL;
+    
+    return cbUtil_strnalloc(str, strlen(str));
+}
+
+char* cbUtil_strnalloc(const char* str, size_t strlength)
+{
+    if(str == NULL)
+        return NULL;
+    
+    // String length used for size alloc and copy
+    char* strcopy = malloc(strlength + 1);
+    strncpy(strcopy, str, strlength);
+    strcopy[strlength + 1] = '\0';
+    
+    return strcopy;
+}

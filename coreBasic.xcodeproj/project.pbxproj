@@ -175,7 +175,7 @@
 		4879352C14D49975006A3CAD /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0420;
+				LastUpgradeCheck = 0430;
 				ORGANIZATIONNAME = "Core S2 Software Solutions";
 			};
 			buildConfigurationList = 4879352F14D49975006A3CAD /* Build configuration list for PBXProject "coreBasic" */;

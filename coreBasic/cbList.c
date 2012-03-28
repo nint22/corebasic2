@@ -161,6 +161,44 @@ void* cbList_PeekBack(cbList* List)
         return List->Back->Data;
 }
 
+void* cbList_GetElement(cbList* List, int Index)
+{
+    // If the index is out of bounds, return null
+    if(Index < 0 || Index >= List->Count)
+        return NULL;
+    
+    // Seek through the list
+    cbListNode* Node = List->Front;
+    for(int i = 1; i <= Index; i++)
+        Node = Node->Next;
+    return Node->Data;
+}
+
+bool cbList_Subset(cbList* List, cbList* Subset, int Index, int n)
+{
+    // Bounds check
+    if(Index < 0 || Index >= List->Count || Index + n >= List->Count)
+        return false;
+    
+    // Create a new list that is our subset
+    cbList_Init(Subset);
+    
+    // Copy elements
+    cbListNode* Node = List->Front;
+    for(int i = 0; i < Index + n; i++)
+    {
+        // If we are in the range, copy over
+        if(i >= Index)
+            cbList_PushBack(Subset, Node->Data);
+        
+        // Next node
+        Node = Node->Next;
+    }
+    
+    // Done
+    return true;
+}
+
 int cbList_FindOffset(cbList* List, void* Data, bool (*ComparisonFunc)(void* A, void* B))
 {
     // Node count

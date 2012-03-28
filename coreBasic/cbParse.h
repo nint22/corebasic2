@@ -24,12 +24,55 @@
 void cbParse_ParseProgram(const char* Program, cbList* ErrorList);
 
 // Main compiler function; the root of all compilation
-void cbParse_CompileProgram(cbList* ErrorList);
+//void cbParse_CompileProgram(cbList* ErrorList);
 
-/*** Parsing / Helper Functions ***/
+/*** Lexer / Parsing Functions ***/
+
+// Parse a given line of text, up to the end of the buffer or newline
+// Any erorrs are posted into the given error list
+void cbParse_ParseLine(const char* Line, size_t LineCount, cbList* ErrorList);
+
+// Returns true if the given line (represented by tokens) is a statement
+bool cbParse_IsStatement(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns true if the given line (represented by tokens) is a declaraton
+bool cbParse_IsDeclaration(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns true if the given token is an ID
+bool cbParse_IsID(const char* Token, size_t TokenLength);
+
+// Returns true if it is either an integer, boolean, or float
+bool cbParse_IsNumString(const char* Token, size_t TokenLength);
+
+// Returns true if it is the start of a conditional block
+bool cbParse_IsStatementIf(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is the start of a while block
+bool cbParse_IsStatementWhile(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is the start of a for block
+bool cbParse_IsStatementFor(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it a goto statement
+bool cbParse_IsStatementGoto(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a label statement
+bool cbParse_IsStatementLabel(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns true if it is a valid expression
+bool cbParse_IsExpression(cbList* Tokens, size_t LineCount, cbList* ErrorList);
+
+// Returns a token from the string
+// Ignores all C-style double-slash comment structures until the newline
+// Returns newlines as a single new-line token '\n' and returns a NULL at the end of the buffer
+const char* cbParse_GetToken(const char* String, size_t* TokenLength);
+
+/*** Helper Functions ***/
 
 // Error reporting associated with code compiling
 void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber);
+
+#ifdef __cBASIC9__
 
 // Parses a block of code, calling itself recursively for each new block, so that
 // control code (i.e. for-loops and while-loops) do not intersect or collide
@@ -49,9 +92,6 @@ cbError cbParse_ParseExpression(const char* Expression, cbList* OutputBuffer);
 // Note that this function internally allocates strings and will return a string that needs to be released explicitly
 cbError cbParse_ParseFor(const char* Expression, char** IteratorExp, char** MinExp, char** MaxExp, char** IncrementExp);
 
-// Returns a token from the string
-const char* cbParse_GetToken(const char* String, size_t* TokenLength);
-
 /*** Instruction-Parsing and Generation Wrappers ***/
 
 // Save a given variable token into the variables list (if needed) and push the load variable command
@@ -62,6 +102,9 @@ cbError cbLang_LoadLiteral(cbList* InstructionsList, cbList* DataList, char* Tok
 
 // Push the relative op into the instructions list
 cbError cbLang_LoadOp(cbList* InstructionsList, char* Token, size_t TokenLength);
+
+// End of old code
+#endif
 
 // End if inclusion guard
 #endif

@@ -13,8 +13,7 @@
 void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
 {
     // Keep an active token pointer; this changes over time
-    const char* ActiveToken = Program;
-    size_t TokenLength = 0;
+    const char* ActiveLine = Program;
     
     // The line we are on
     size_t LineCount = 1;
@@ -22,40 +21,357 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
     // Keep parsing until done
     while(true)
     {
-        // Get the active token (previous address + previous length)
-        ActiveToken = cbParse_GetToken(ActiveToken + TokenLength, &TokenLength);
+        // Parse this line
+        cbParse_ParseLine(ActiveLine, LineCount, ErrorList);
         
-        // If this is the end of the stream, or the token has no length
-        if(ActiveToken == NULL)
+        // Get the next new-line
+        ActiveLine = strchr(ActiveLine, '\n');
+        
+        // If this is the end of the program, stop parsing
+        if(ActiveLine == NULL || ActiveLine[1] == '\0')
             break;
-        
-        // If this is a newline, we grow the line count
-        else if(TokenLength == 1 && ActiveToken[0] == '\n')
-            LineCount++;
-        
-        // Regular token to parse
+        // Point to the next line, and grow the line count
         else
         {
-            // Apply production rules
-            
+            ActiveLine++;
+            LineCount++;
         }
     }
     
     // Done parsing
 }
 
-/*void cbParse_ParseLine(const char* Line, cbList* ErrorList)
+void cbParse_ParseLine(const char* Line, size_t LineCount, cbList* ErrorList)
 {
+    // Keep an active token pointer; this changes over time
+    const char* ActiveToken = Line;
+    size_t TokenLength = 0;
     
-}
-*/
-void cbParse_CompileProgram(cbList* ErrorList)
-{
+    // Build a list of all tokens, from left to right
+    // Each token is a heap-allocated string
+    cbList Tokens;
+    cbList_Init(&Tokens);
     
+    // Keep parsing until done
+    while(true)
+    {
+        // Get the active token (previous address + previous length)
+        ActiveToken = cbParse_GetToken(ActiveToken + TokenLength, &TokenLength);
+        
+        // If this is the end of the stream, or the end of the line, break out
+        if(ActiveToken == NULL || (TokenLength == 1 && ActiveToken[0] == '\n'))
+            break;
+        
+        // Add token into the list
+        cbList_PushBack(&Tokens, cbUtil_strnalloc(ActiveToken, TokenLength));
+    }
+    
+    // Line production rule:
+    // Line -> {Statement | Declaration}
+    if(cbParse_IsStatement(&Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    else if(cbParse_IsDeclaration(&Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    else
+        cbParse_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
+    
+    // Release the tokens
+    while(cbList_GetCount(&Tokens) > 0)
+        free(cbList_PopFront(&Tokens));
 }
 
+bool cbParse_IsStatement(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    // Statement production rule:
+    // Statement → {StatementIf? | StatementWhile? | StatementFor? | StatementGoto? | StatementLabel? | Expression}
+    if(cbParse_IsStatementIf(Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    else if(cbParse_IsStatementWhile(Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    else if(cbParse_IsStatementFor(Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    else if(cbParse_IsStatementGoto(Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    else if(cbParse_IsStatementLabel(Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    else if(cbParse_IsExpression(Tokens, LineCount, ErrorList))
+    {
+        
+    }
+    
+    // No statement match found, fail
+    return false;
+}
 
-/**** OLD CODE ****/
+bool cbParse_IsDeclaration(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    // Declaration production rule:
+    // Declaration -> {ID = ID | ID = NumString? | ID = Expression}
+    
+    // Must have a minimum of three or more tokens
+    if(cbList_GetCount(Tokens) < 3)
+        return false;
+    
+    // First token must always be an ID
+    char* DestID = cbList_GetElement(Tokens, 0);
+    if(!cbParse_IsID(DestID, strlen(DestID)))
+        return false;
+    
+    // Second token must always be the equal op
+    char* AssignmentOp = cbList_GetElement(Tokens, 1);
+    if(strlen(AssignmentOp) != 1 || AssignmentOp[0] != '=')
+        return false;
+    
+    // Third token may be either an ID or a NumString
+    if(cbList_GetCount(Tokens) == 3)
+    {
+        // Get last token
+        char* SourceToken = cbList_GetElement(Tokens, 2);
+        size_t TokenLength = strlen(SourceToken);
+        
+        // Either is an ID or a number
+        if(cbParse_IsID(SourceToken, TokenLength) || cbParse_IsNumString(SourceToken, TokenLength))
+            return true;
+    }
+    // Possible expression
+    else if(cbList_GetCount(Tokens) > 3)
+    {
+        // Get all expressions into their own list
+        cbList ExpressionTokens;
+        cbList_Subset(Tokens, &ExpressionTokens, 2, cbList_GetCount(Tokens) - 2);
+        
+        // If is expression, valid
+        if(cbParse_IsExpression(&ExpressionTokens, LineCount, ErrorList))
+           return true;
+    }
+    
+    // No match found of the last elements, failed
+    return false;
+}
+
+bool cbParse_IsID(const char* Token, size_t TokenLength)
+{
+    // Note: the production rule here is complex, but can be simplified
+    // to non-recursive rules
+        
+    // Must be at least 1 char long
+    if(Token == NULL || TokenLength < 1)
+        return false;
+    
+    // Just char must be just alpha
+    if(!isalpha(Token[0]))
+        return false;
+    
+    // The rest must be alpha-num
+    for(size_t i = 1; i < TokenLength; i++)
+        if(!isalnum(Token[0]))
+            return false;
+    
+    // Otherwise, all good!
+    return true;
+}
+
+bool cbParse_IsNumString(const char* Token, size_t TokenLength)
+{
+    // Note: the production rule here is complex, but can be simplified
+    // to non-recursive rules
+    
+    // Must be at least 1 char long
+    if(Token == NULL || TokenLength < 1)
+        return false;
+    
+    // If true or false, return true
+    if(strncmp(Token, "true", 5) == 0 || strncmp(Token, "true", 6))
+        return true;
+    
+    // Could be a whole integer or float
+    bool IsInteger = true;
+    int DotCount = 0;
+    for(size_t i = 0; i < TokenLength; i++)
+    {
+        if(Token[i] == '.')
+            DotCount++;
+        else if(!isnumber(Token[i]))
+            IsInteger = false;
+    }
+    
+    // Either integer or float
+    if(IsInteger && DotCount <= 1)
+        return true;
+    
+    // Otherwise, failed
+    return false;
+}
+
+bool cbParse_IsStatementIf(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    /*
+     StatementIf -> {if(Bool) Statement end | if(Bool) Statement StatementElif? | if(Bool) Statement StatementElse?}
+     StatementElif -> {elif(Bool) Statement end | elif(Bool) Statement StatementElif? | elif(Bool) Statement StatementElse?}
+     StatementElse -> {else Statement end}
+    */
+    
+    // If conditions always start with if, (, <bool>, ) ..
+    if(cbList_GetCount(Tokens) < 4)
+        return false;
+    
+    // First token must be if
+    char* IfToken = cbList_GetElement(Tokens, 0);
+    if(strcmp(IfToken, "if") != 0)
+        return false;
+    
+    // Second and last token should always be '(' and ')' respectivly
+    char* FirstParenth = cbList_GetElement(Tokens, 1);
+    char* LastParenth = cbList_PeekBack(Tokens);
+    if(strlen(FirstParenth) != 1 || FirstParenth[0] != '(' ||
+       strlen(LastParenth) != 1 || LastParenth[0] != ')')
+        return false;
+    
+    // Pase the boolean expression within the parenth
+    cbList Bool;
+    cbList_Subset(Tokens, &Bool, 2, cbList_GetCount(Tokens) - 3);
+    
+    // Boolean expression must be valid
+    //cbParse_Bool(Tokens, LineCount, ErrorList);
+    
+    // TODO
+    return false;
+}
+
+bool cbParse_IsStatementWhile(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    // TODO
+    return false;
+}
+
+bool cbParse_IsStatementFor(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    // TODO
+    return false;
+}
+
+bool cbParse_IsStatementGoto(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    // Goto statements should always be two tokens
+    if(cbList_GetCount(Tokens) != 2)
+        return false;
+    
+    // First must always match "goto"
+    if(strcmp(cbList_GetElement(Tokens, 0), "goto") != 0)
+        return false;
+    
+    // Second must always be an ID
+    char* ID = cbList_GetElement(Tokens, 1);
+    if(!cbParse_IsID(ID, strlen(ID)))
+        return false;
+    
+    // Else, all good
+    return true;
+}
+
+bool cbParse_IsStatementLabel(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    // Goto statements should always be three tokens
+    if(cbList_GetCount(Tokens) != 3)
+        return false;
+    
+    // First must always match "label"
+    if(strcmp(cbList_GetElement(Tokens, 0), "label") != 0)
+        return false;
+    
+    // Second must always be an ID
+    char* ID = cbList_GetElement(Tokens, 1);
+    if(!cbParse_IsID(ID, strlen(ID)))
+        return false;
+    
+    // Final is just a single colon
+    char* Colon = cbList_GetElement(Tokens, 1);
+    if(strlen(Colon) != 1 || Colon[0] != ':')
+        return false;
+    
+    // Else, all good
+    return true;
+}
+
+bool cbParse_IsExpression(cbList* Tokens, size_t LineCount, cbList* ErrorList)
+{
+    // TODO
+    return false;
+}
+
+const char* cbParse_GetToken(const char* String, size_t* TokenLength)
+{
+    // Start and end
+    size_t Start, End;
+    size_t StringLength = strlen(String);
+    
+    // Keep skipping white spaces
+    for(Start = 0; Start < StringLength; Start++)
+        if(!isspace(String[Start]))
+            break;
+    
+    // If this is a string literal (must be in quotes), seek until next quote
+    if(String[Start] == '"')
+    {
+        // Keep searching until the end
+        for(End = Start + 1; End < StringLength; End++)
+        {
+            if(String[End] == '"')
+            {
+                // Grow to include last quote
+                End++;
+                break;
+            }
+        }
+    }
+    // Else if we hit a math operator
+    else if(String[Start] == '(' || String[Start] == ')' || String[Start] == '+' || String[Start] == '-' ||
+            String[Start] == '*' || String[Start] == '/' || String[Start] == '%' || String[Start] == '=')
+    {
+        End = Start + 1;
+    }
+    // Else if we hit a boolean operator (of 2-char length)
+    else if((StringLength - Start) >= 2 && cbLang_IsOp(String + Start, 2))
+    {
+        End = Start + 2;
+    }
+    // Else if we hit a boolean operator (of 1-char length)
+    else if((StringLength - Start) >= 1 && cbLang_IsOp(String + Start, 1))
+    {
+        End = Start + 1;
+    }
+    // Else, arg. separator? (i.e. a comma)
+    else if((StringLength - Start) >= 1 && String[0] == ',')
+    {
+        End = Start + 1;
+    }
+    // Else, just keep skipping to any sort of non-alphanum character
+    else
+    {
+        // If white space or a special single-char, just stop
+        for(End = Start; End < StringLength; End++)
+            if(isspace(String[End]) || !isalnum(String[End]))
+                break;
+    }
+    
+    // Return length and string
+    *TokenLength = End - Start;
+    return String + Start;
+}
 
 void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
 {
@@ -67,6 +383,8 @@ void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
     // Insert into list
     cbList_PushBack(ErrorList, NewError);
 }
+
+#ifdef __cBASIC9__
 
 cbError cbParse_ParseBlock(char** Code, cbList* InstructionsList, cbList* DataList, cbList* VariablesList, cbList* JumpTable, cbList* LabelTable, int StackDepth)
 {
@@ -724,66 +1042,6 @@ cbError cbParse_ParseFor(const char* Expression, char** IteratorExp, char** MinE
     return cbError_None;
 }
 
-const char* cbParse_GetToken(const char* String, size_t* TokenLength)
-{
-    // Start and end
-    size_t Start, End;
-    size_t StringLength = strlen(String);
-    
-    // Keep skipping white spaces
-    for(Start = 0; Start < StringLength; Start++)
-        if(!isspace(String[Start]))
-            break;
-    
-    // If this is a string literal (must be in quotes), seek until next quote
-    if(String[Start] == '"')
-    {
-        // Keep searching until the end
-        for(End = Start + 1; End < StringLength; End++)
-        {
-            if(String[End] == '"')
-            {
-                // Grow to include last quote
-                End++;
-                break;
-            }
-        }
-    }
-    // Else if we hit a math operator
-    else if(String[Start] == '(' || String[Start] == ')' || String[Start] == '+' || String[Start] == '-' ||
-            String[Start] == '*' || String[Start] == '/' || String[Start] == '%' || String[Start] == '=')
-    {
-        End = Start + 1;
-    }
-    // Else if we hit a boolean operator (of 2-char length)
-    else if((StringLength - Start) >= 2 && cbLang_IsOp(String + Start, 2))
-    {
-        End = Start + 2;
-    }
-    // Else if we hit a boolean operator (of 1-char length)
-    else if((StringLength - Start) >= 1 && cbLang_IsOp(String + Start, 1))
-    {
-        End = Start + 1;
-    }
-    // Else, arg. separator? (i.e. a comma)
-    else if((StringLength - Start) >= 1 && String[0] == ',')
-    {
-        End = Start + 1;
-    }
-    // Else, just keep skipping to any sort of non-alphanum character
-    else
-    {
-        // If white space or a special single-char, just stop
-        for(End = Start; End < StringLength; End++)
-            if(isspace(String[End]) || !isalnum(String[End]))
-                break;
-    }
-    
-    // Return length and string
-    *TokenLength = End - Start;
-    return String + Start;
-}
-
 cbError cbLang_LoadVariable(cbList* InstructionsList, cbList* VariablesList, char* Token, size_t TokenLength)
 {
     // Does this variable name exist?
@@ -927,3 +1185,5 @@ cbError cbLang_LoadOp(cbList* InstructionsList, char* Token, size_t TokenLength)
     
     return cbError_None;
 }
+
+#endif

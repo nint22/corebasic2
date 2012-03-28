@@ -74,6 +74,15 @@ void* cbList_PeekFront(cbList* List);
 // Return the back element of the given list without removing it
 void* cbList_PeekBack(cbList* List);
 
+// Get an element at the given index; takes O(n) time since we must
+// traverse the list as the internal implemented is a linked-list
+// A null is returned if out of bounds
+void* cbList_GetElement(cbList* List, int Index);
+
+// Return a new list that is the subset of the given list
+// The subset starts and index and is only of length n
+bool cbList_Subset(cbList* List, cbList* Subset, int Index, int n);
+
 // Returns the number of elements from the start of the list until an elements data passes
 // the given comparison test with the given variable data; returns a negative number upon failure
 int cbList_FindOffset(cbList* List, void* Data, bool (*ComparisonFunc)(void* A, void* B));

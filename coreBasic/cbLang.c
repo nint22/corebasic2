@@ -24,221 +24,40 @@ bool cbInit_LoadSourceCode(cbVirtualMachine* Processor, unsigned long MemorySize
         return false;
     }
     
-    // Define an error flag we can set over time
-    cbError Error = cbError_None;
+    /*** Parse & Compile Code ***/
+    
+    // Null out the processor
+    memset((void*)Processor, 0, sizeof(cbVirtualMachine));
+    
+    // Parse the code
+    cbParse_ParseProgram(Code, ErrorList);
+    
+    // If there are any errors, dont bother with the processor init
+    if(cbList_GetCount(ErrorList) > 0)
+        return false;
+    
+    /*** Initialize Machine ***/
     
     // Save standard i/o buffers immediately
     Processor->StreamOut = StreamOut;
     Processor->StreamIn = StreamIn;
     
-    // Save screen size
+    // Save screen size and allocate buffer
     Processor->ScreenWidth = ScreenWidth;
     Processor->ScreenHeight = ScreenHeight;
+    Processor->ScreenBuffer = malloc(ScreenWidth * ScreenHeight);
     
-    /*** Prepare Code ***/
+    // TODO:
+    // Initiailize correct machine registers
     
-    // Our own working buffer
-    size_t CodeLength = strlen(Code);
-    char* CodeBuffer = malloc(CodeLength + 1); // Includes null-terminator
-    char* CodeBufferStart = CodeBuffer;
-    
-    // Copy the source code to be manipulated
-    // Note: we go up to the length, to copy over the null-terminator
-    for(size_t i = 0; i <= CodeLength; i++)
-        CodeBuffer[i] = Code[i];
-    
-    /*** Remove all comments ***/
-    
-    // Comments start with "//" and end with new-lines
-    // Just fill those segments with carriage-returns, i.e. '\r'
-    bool IsFilling = false;
-    for(size_t i = 0; i < CodeLength - 1; i++)
-    {
-        if(CodeBuffer[i] == '/' && CodeBuffer[i + 1]  == '/')
-            IsFilling = true;
-        else if(CodeBuffer[i] == '\n')
-            IsFilling = false;
-        
-        if(IsFilling)
-            CodeBuffer[i] = '\r';
-    }
-    
-    /*** Parse & Compile ***/
-    
-    // Create a list to handle all instructions and constants (static data section)
-    cbList InstructionsList, DataList, VariablesList, JumpTable, LabelTable;
-    cbList_Init(&InstructionsList); // Array of cbInstructions
-    cbList_Init(&DataList);         // Array of cbVariables (static data)
-    cbList_Init(&VariablesList);    // Array of cbVariables (offsets)
-    cbList_Init(&JumpTable);        // Mixed-array of [0: cbInstructions (jumps), 1: label-names] (but not yet linked)
-    cbList_Init(&LabelTable);       // Array of of __cbLabel-type labels (and their indices)
-    
-    // Parse the initial block
-    Error = cbParse_ParseBlock(&CodeBuffer, &InstructionsList, &DataList, &VariablesList, &JumpTable, &LabelTable, 0);
-    
-    /*** Build Memory for Simulation ***/
-    
-    // Processor not halted
-    Processor->Halted = false;
-    Processor->InterruptState = cbInterrupt_None;
-    
-    // Prepare the global memory map of the simulator
-    Processor->Memory = malloc(MemorySize);
-    Processor->MemorySize = MemorySize;
-    
-    // Default to no tick count and line 1
-    Processor->Ticks = 0;
-    Processor->LineIndex = 1;
-    
-    // 1. Connect all labels and goto's
-    
-    // For each goto-label command
-    cbInstruction* Goto = NULL;
-    while((Goto = cbList_PopFront(&JumpTable)) != NULL)
-    {
-        // The args are actually malloc'ed strings, to use to find the label
-        char* LabelName = cbList_PopFront(&JumpTable);
-        
-        // Attempt to find the correct label
-        size_t LabelCount = cbList_GetCount(&LabelTable);
-        bool Found = false;
-        for(size_t i = 0; i < LabelCount && !Found; i++)
-        {
-            // Look at front
-            __cbLabel* Label = cbList_PopFront(&LabelTable);
-            
-            // If found, set offset and flag as done
-            if(strcmp(Label->Label, LabelName) == 0)
-            {
-                Found = true;
-                int Top = Label->Index;
-                int Bottom = cbList_FindOffset(&InstructionsList, Goto, cbList_ComparePointer);
-                Goto->Arg = (Top - Bottom + 1) * sizeof(cbInstruction);
-            }
-            
-            // Put back for other jumps to test against
-            cbList_PushBack(&LabelTable, Label);
-        }
-        
-        // If never found, it's an error
-        if(!Found)
-            Error = cbError_MissingLabel;
-        
-        // Done
-        free(LabelName);
-    }
-    
-    // Release all label objects
-    __cbLabel* Label = NULL;
-    while((Label = cbList_PopBack(&LabelTable)) != NULL)
-        free(Label);
-    
-    // 2. Add space for the variables and a stop command at the end of this block
-    
-    // Initialize stack pointers to the highest address (stack size set to 0)
-    Processor->StackBasePointer = Processor->MemorySize;
-    Processor->StackPointer = Processor->MemorySize;
-    
-    // Lower the stack pointer (i.e. grow the stack) for all local variables
-    if(cbList_GetCount(&VariablesList) > 0)
-    {
-        cbInstruction* SpaceInstruction = malloc(sizeof(cbInstruction));
-        SpaceInstruction->Op = cbOps_AddStack;
-        SpaceInstruction->Arg = -(int)(cbList_GetCount(&VariablesList) * sizeof(cbVariable));
-        cbList_PushFront(&InstructionsList, SpaceInstruction);
-    }
-    
-    // 3. Add a standard halt instruction, so we know the program explicitly completed and didn't fail
-    
-    // Explicitly add a stop at the end of the instructions
-    cbInstruction* StopInstruction = malloc(sizeof(cbInstruction));
-    StopInstruction->Op = cbOps_Stop;
-    StopInstruction->Arg = 0;
-    cbList_PushBack(&InstructionsList, StopInstruction);
-    
-    // 4. Copy the code segment
-    
-    // Helper variables when walking through the lists
-    void* Node = NULL;
-    size_t ByteOffset = 0;
-    
-    // Copy code
-    Processor->InstructionPointer = 0;
-    while((Node = cbList_PopFront(&InstructionsList)) != NULL)
-    {
-        // Copy over data
-        memcpy(Processor->Memory + ByteOffset, Node, sizeof(cbInstruction));
-        ByteOffset += sizeof(cbInstruction);
-        
-        // Release node
-        free(Node);
-    }
-    
-    // 5. Above code, copy over static data
-    
-    // Default to no var count
-    Processor->DataVarCount = 0;
-    
-    // Copy each variable
-    Processor->DataPointer = ByteOffset;
-    while((Node = cbList_PopFront(&DataList)) != NULL)
-    {
-        // Copy over data
-        memcpy(Processor->Memory + ByteOffset, Node, sizeof(cbVariable));
-        ByteOffset += sizeof(cbVariable);
-        
-        // Release node
-        free(Node);
-        
-        // Grow variable count
-        Processor->DataVarCount++;
-    }
-    
-    // For each variable, copy string data as needed
-    size_t OffsetEnd = ByteOffset;
-    for(size_t Offset = Processor->DataPointer; Offset < OffsetEnd; Offset += sizeof(cbVariable))
-    {
-        // Is this variable a string?
-        cbVariable* Variable = (cbVariable*)(Processor->Memory + Offset);
-        if(Variable->Type == cbType_String)
-        {
-            // Grab from heap
-            char* HeapString = Variable->Data.String;
-            
-            // Have the variable point to the new address
-            Variable->Data.String = (char*)(ByteOffset - Processor->DataPointer);
-            
-            // Cap the string
-            HeapString[strlen(HeapString) - 1] = 0;
-            
-            // Copy the string with the null terminator
-            strncpy(Processor->Memory + ByteOffset, HeapString + 1, strlen(HeapString));
-            ByteOffset += strlen(HeapString);
-            
-            // Release from heap
-            free(HeapString);
-        }
-    }
-    
-    // 6. Save the heap-starting address
-    Processor->HeapPointer = ByteOffset;
-    
-    // Done with code buffer
-    free(CodeBufferStart);
-    
-    // Done with lists
-    cbList_Release(&VariablesList);
-    cbList_Release(&InstructionsList);
-    cbList_Release(&DataList);
-    cbList_Release(&JumpTable);
-    cbList_Release(&LabelTable);
-    
-    // All done!
-    return Error;
+    // Done without any erorrs
+    return true;
 }
 
 cbError cbInit_LoadByteCode(cbVirtualMachine* Processor, unsigned long MemorySize, FILE* InFile, FILE* StreamOut, FILE* StreamIn, size_t ScreenWidth, size_t ScreenHeight)
 {
+    // TODO: NEED TO UPDATE
+    /*
     // Ignore if any arg is null
     if(Processor == NULL || InFile == NULL || StreamOut == NULL || StreamIn == NULL)
         return cbError_Null;
@@ -271,13 +90,15 @@ cbError cbInit_LoadByteCode(cbVirtualMachine* Processor, unsigned long MemorySiz
     
     // Copy text (data) segment to second segment
     fread((void*)Processor->Memory + Processor->DataPointer, Processor->HeapPointer - Processor->DataPointer, 1, InFile);
-    
+    */
     // No error
     return cbError_None;
 }
 
 cbError cbInit_SaveByteCode(cbVirtualMachine* Processor, FILE* OutFile)
 {
+    // TODO: NEED TO UPDATE
+    /*
     // Fail if either is null
     if(Processor == NULL || OutFile == NULL)
         return cbError_Null;
@@ -294,7 +115,7 @@ cbError cbInit_SaveByteCode(cbVirtualMachine* Processor, FILE* OutFile)
     
     // Dump the static data segment
     fwrite(Processor->Memory + Processor->DataPointer, Processor->HeapPointer - Processor->DataPointer, 1, OutFile);
-    
+    */
     // No error
     return cbError_None;
 }
@@ -305,14 +126,12 @@ cbError cbRelease(cbVirtualMachine* Processor)
     if(Processor == NULL)
         return cbError_Null;
     
-    // Release the allocated processor memory
+    // Release the allocated processor memory and graphics map
     free(Processor->Memory);
-    Processor->Memory = NULL;
-    Processor->MemorySize = 0;
+    free(Processor->ScreenBuffer);
     
-    // Release the queued draw commands
-    while(cbList_GetCount(&Processor->ScreenQueue) > 0)
-        free(cbList_PopBack(&Processor->ScreenQueue));
+    // Null out the processor
+    memset((void*)Processor, 0, sizeof(cbVirtualMachine));
     
     // Note: it is up to the user to release the given file streams
     return cbError_Null;

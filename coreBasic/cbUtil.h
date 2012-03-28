@@ -98,5 +98,15 @@ bool cbList_ComparePointer(void* A, void* B);
 // Returns the english-language error string associated with the given error code
 __cbEXPORT const char* const cbLang_GetErrorMsg(cbError ErrorCode);
 
+/*** Macro-like Functions ***/
+
+// Allocate, on the heap, a string that contains the given string buffer
+// As with any object on the heap, it is up to the user to release it
+inline char* cbUtil_stralloc(const char* str);
+
+// Allocate, on the heap, a string that contains the given string buffer of given length
+// As with any object on the heap, it is up to the user to release it
+inline char* cbUtil_strnalloc(const char* str, size_t strlength);
+
 // End of inclusion guard
 #endif

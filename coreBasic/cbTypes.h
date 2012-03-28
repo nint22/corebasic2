@@ -143,10 +143,12 @@ typedef struct __cbVirtualMachine
      LOW ADDRESS
      
      Graphical memory is allocated as its own seperate chunk:
-     Total byte count: (width * height) / 4, since 4 pixels in one byte
+     Total byte count: (width * height), 1 byte per pixel
+     Note that color is gray-scale and only ranges from [0, 3]
+     
      +--------+
      |        |
-     | Screen | <-- Origin is bottom-left, 2-bits per pixel
+     | Screen | <-- Origin is bottom-left, 1 byte per pixel
      |        |
      +--------+
      
@@ -168,14 +170,9 @@ typedef struct __cbVirtualMachine
     FILE* StreamIn;
     
     // Screen dimensions
+    // Note that the screen origin in the bottom-left
     size_t ScreenWidth, ScreenHeight;
     unsigned char* ScreenBuffer;
-    
-    // List of all queued screen-write commands
-    // Each element in the array is three unsigned-ints, the first two being the
-    // position, and the last being the color. Note that if there is a sequence of
-    // all three bytes being INT_UMAX, then that is the clear-screen operator
-    cbList ScreenQueue;
     
     // The current line we are executing in a simulation
     size_t LineIndex;
@@ -289,7 +286,9 @@ static const char cbOpsNames[cbOpsCount][16] =
 };
 
 // Failure reasons
-static const int cbErrorCount = 15;
+// Note that these are both parsing, compiling,
+// and run-time error definitions
+static const int cbErrorCount = 17;
 typedef enum __cbError
 {
     cbError_None,
@@ -297,6 +296,7 @@ typedef enum __cbError
     cbError_Overflow,
     cbError_UnknownOp,
     cbError_UnknownToken,
+    cbError_UnknownLine,
     cbError_DivZero,
     cbError_TypeMismatch,
     cbError_ParenthMismatch,
@@ -307,6 +307,7 @@ typedef enum __cbError
     cbError_ParseFloat,
     cbError_MissingArgs,
     cbError_MissingLabel,
+    cbError_InvalidID,
 } cbError;
 
 // English-language error names
@@ -317,6 +318,7 @@ static const char cbErrorNames[cbErrorCount][64] =
     "Overflow or out of bounds access",
     "Unknown operator",
     "Unknown token",
+    "Unknown line formation",
     "Tried to divide by zero",
     "Type mismatch",
     "Parentheses mismatch",
@@ -327,6 +329,7 @@ static const char cbErrorNames[cbErrorCount][64] =
     "Failed to parse float",
     "Missing arguments",
     "Missing label",
+    "Invalid variable name",
 };
 
 // Define a parsing error which is an error code and a line number

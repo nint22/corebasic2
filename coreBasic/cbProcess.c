@@ -218,21 +218,9 @@ void cbStep_ReleaseInterrupt(cbVirtualMachine* Processor, const char* UserInput)
     }
 }
 
-bool cbStep_GetOutput(cbVirtualMachine* Processor, unsigned int* x, unsigned int* y, unsigned int* color)
+const unsigned char* const cbStep_GetScreenBuffer(cbVirtualMachine* Processor)
 {
-    // If anything in the queue, post and return
-    if(cbList_GetCount(&Processor->ScreenQueue) > 0)
-    {
-        // Get data
-        unsigned int* Command = cbList_PopFront(&Processor->ScreenQueue);
-        *x = Command[0];
-        *y = Command[1];
-        *color = Command[2];
-        free(Command);
-        return true;
-    }
-    else
-        return false;
+    return Processor->ScreenBuffer;
 }
 
 cbError cbStep_MathOp(cbVirtualMachine* Processor, cbInstruction* Instruction)
@@ -515,12 +503,8 @@ cbError cbStep_Output(cbVirtualMachine* Processor, cbInstruction* Instruction)
     if(X->Data.Int < 0 || X->Data.Int >= Processor->ScreenWidth || Y->Data.Int < 0 || Y->Data.Int >= Processor->ScreenHeight)
         return cbError_Overflow;
     
-    // Write to memory (i.e. the output draw queue)
-    unsigned int* DrawCommand = malloc(3 * sizeof(unsigned int));
-    DrawCommand[0] = X->Data.Int;
-    DrawCommand[1] = Y->Data.Int;
-    DrawCommand[2] = C->Data.Int;
-    cbList_PushBack(&Processor->ScreenQueue, DrawCommand);
+    // Find the byte position of the pixel
+    Processor->ScreenBuffer[Processor->ScreenWidth * Y->Data.Int + X->Data.Int] = C->Data.Int;
     
     // No problem
     return cbError_None;
@@ -528,12 +512,8 @@ cbError cbStep_Output(cbVirtualMachine* Processor, cbInstruction* Instruction)
 
 cbError cbStep_Clear(cbVirtualMachine* Processor, cbInstruction* Instruction)
 {
-    // Place three MAX_UINT to signal a clear screen
-    unsigned int* DrawCommand = malloc(3 * sizeof(unsigned int));
-    DrawCommand[0] = (unsigned int)(-1);
-    DrawCommand[1] = (unsigned int)(-1);
-    DrawCommand[2] = (unsigned int)(-1);
-    cbList_PushBack(&Processor->ScreenQueue, DrawCommand);
+    // Clear buffer
+    memset((void*)Processor->ScreenBuffer, 0, Processor->ScreenWidth * Processor->ScreenHeight);
     
     // No error, ever
     return cbError_None;

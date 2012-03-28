@@ -28,10 +28,10 @@ __cbEXPORT cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptSta
 // Release (set to false) the interrupt state; completing the input-interruption
 __cbEXPORT void cbStep_ReleaseInterrupt(cbVirtualMachine* Processor, const char* UserInput);
 
-// Returns true if the process has any queued drawing commands for the given screen buffer
-// If there are no queued events, then false is retured. Note that this is a read-once function
-// call where any following calls will result in any new outputs; i.e. you are reading from a queue
-__cbEXPORT bool cbStep_GetOutput(cbVirtualMachine* Processor, unsigned int* x, unsigned int* y, unsigned int* color);
+// Allows read-access to the given screen buffer, copying n bytes from the screen buffer into the output
+// Note that n is defined as the total number of bytes representing the screen, but it is 2-bits per pixel,
+// thus n = (ScreenWidth * ScreenHeight) / 4, with the origin in the bottom left of the screen
+__cbEXPORT const unsigned char* const cbStep_GetScreenBuffer(cbVirtualMachine* Processor);
 
 /*** Helper Functions ***/
 
