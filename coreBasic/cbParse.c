@@ -14,7 +14,8 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
 {
     // Create our symbols table (just for lexical analysis help for now)
     cbSymbolsTable SymbolsTable;
-    cbList_Init(&SymbolsTable.LocalStack);
+    SymbolsTable.BlockStack = 0;
+    cbList_Init(&SymbolsTable.LexTree);
     
     // Keep an active token pointer; this changes over time
     const char* ActiveLine = Program;
@@ -26,7 +27,9 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
     while(true)
     {
         // Parse this line
-        cbParse_ParseLine(ActiveLine, &SymbolsTable, LineCount, ErrorList);
+        cbLexNode* LexTree = cbParse_ParseLine(ActiveLine, &SymbolsTable, LineCount, ErrorList);
+        if(LexTree != NULL)
+            cbList_PushBack(&SymbolsTable.LexTree, LexTree);
         
         // Get the next new-line
         ActiveLine = strchr(ActiveLine, '\n');
@@ -43,13 +46,13 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
     }
     
     // If the local stack is not empty, then there is a dangling end-block
-    if(cbList_GetCount(&SymbolsTable.LocalStack) > 0)
+    if(SymbolsTable.BlockStack > 0)
         cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
     
     // Done parsing
 }
 
-void cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
     // Keep an active token pointer; this changes over time
     const char* ActiveToken = Line;
@@ -74,94 +77,119 @@ void cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, size_t Li
         cbList_PushBack(&Tokens, cbUtil_strnalloc(ActiveToken, TokenLength));
     }
     
-    // Debugging
-    printf("Line %lu: (%lu tokens)\n\t", LineCount, cbList_GetCount(&Tokens));
-    for(int i = 0; i < cbList_GetCount(&Tokens); i++)
-        printf("'%s', ", cbList_GetElement(&Tokens, i));
-    printf("\n");
-    // Debugging
+    // Our parsed line
+    cbLexNode* LexTree = NULL;
     
     // Only process if there are tokens
     if(cbList_GetCount(&Tokens) > 0)
     {
         // Line production rule:
         // Line -> {Statement | Declaration}, but if we have an active conditional stack, validate elif, else, and end product ruels
-        if(!cbParse_IsDeclaration(&Tokens, SymbolsTable, LineCount, ErrorList) && !cbParse_IsStatement(&Tokens, SymbolsTable, LineCount, ErrorList))
+        LexTree = cbParse_IsDeclaration(&Tokens, LineCount, ErrorList);
+        if(LexTree != NULL)
+            LexTree = cbParse_IsStatement(&Tokens, SymbolsTable, LineCount, ErrorList);
+        
+        // On error
+        if(LexTree == NULL)
             cbParse_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
         
         // Release the tokens
         while(cbList_GetCount(&Tokens) > 0)
             free(cbList_PopFront(&Tokens));
     }
+    
+    // All done
+    return LexTree;
 }
 
-bool cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
 {
     // Statement production rule:
     // Statement -> {StatementIf? | StatementWhile? | StatementFor? | StatementGoto? | StatementLabel? | Expression}
+    cbLexNode* Node = NULL;
+    
     // Note: Order is important, because if we don't check for if and while before checking for functions, the
     // expression product will sudgest that a "while(something)" looks like a function call
     
-    // Special rule: if the local stack is non-zero (i.e. we are within a coditional block), look for
-    // both If, Elif, Else, and End statements
-    size_t LocalStackDepth = cbList_GetCount(&SymbolsTable->LocalStack);
+    // Starts new blocks
+    if((Node = cbParse_IsStatementIf(Tokens, LineCount, ErrorList)) || (Node = cbParse_IsStatementWhile(Tokens, LineCount, ErrorList)) || (Node = cbParse_IsStatementFor(Tokens, LineCount, ErrorList)))
+    {
+        SymbolsTable->BlockStack++;
+        return Node;
+    }
     
-    // Apply all production rules...
-    if(cbParse_IsStatementIf(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(LocalStackDepth > 0 && cbParse_IsStatementElif(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(LocalStackDepth > 0 && cbParse_IsStatementElse(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(LocalStackDepth > 0 && cbParse_IsStatementEnd(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(cbParse_IsStatementWhile(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(cbParse_IsStatementFor(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(cbParse_IsStatementGoto(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(cbParse_IsStatementLabel(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
-    else if(cbParse_IsExpression(Tokens, SymbolsTable, LineCount, ErrorList))
-        return true;
+    // Must have at least one block active
+    if(SymbolsTable->BlockStack > 0 && (Node = cbParse_IsStatementElif(Tokens, LineCount, ErrorList)))
+        return Node;
+    if(SymbolsTable->BlockStack > 0 && (Node = cbParse_IsStatementElse(Tokens, LineCount, ErrorList)))
+        return Node;
+    if(SymbolsTable->BlockStack > 0 && (Node = cbParse_IsStatementEnd(Tokens, LineCount, ErrorList)))
+    {
+        // Can never close non-existing blocks
+        if(SymbolsTable->BlockStack <= 0)
+            cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
+        else
+            SymbolsTable->BlockStack--;
+        return Node;
+    }
     
-    // No statement match found, fail
-    return false;
+    // Regular / simple production rules
+    if((Node = cbParse_IsStatementGoto(Tokens, LineCount, ErrorList)))
+        return Node;
+    if((Node = cbParse_IsStatementLabel(Tokens, LineCount, ErrorList)))
+        return Node;
+    if((Node = cbParse_IsExpression(Tokens, LineCount, ErrorList)))
+        return Node;
+    
+    // If matched, pop off stack since we are progressing back up, else, delete the node
+    return Node;
 }
 
-bool cbParse_IsDeclaration(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsDeclaration(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Declaration production rule:
     // Declaration -> {ID = Expression}
+    cbLexNode* Node = NULL;
     
     // Must have a minimum of three or more tokens
-    if(cbList_GetCount(Tokens) < 3)
-        return false;
+    if(cbList_GetCount(Tokens) >= 3)
+    {
+        // First token must always be an ID
+        char* DestID = cbList_GetElement(Tokens, 0);
+        char* AssignmentOp = cbList_GetElement(Tokens, 1);
+        
+        if(cbParse_IsID(DestID, strlen(DestID)) && strcmp(AssignmentOp, "=") == 0)
+        {
+            // Create node for this symbol
+            Node = cbLex_CreateNodeSymbol(cbSymbol_Declaration);
+            
+            // Save ID and op into the parse-tree
+            Node->Left = cbLex_CreateNodeV(DestID);
+            Node->Middle = cbLex_CreateNodeO(cbOps_Set);
+            
+            // The rest is assumed an expression
+            cbList ExpressionTokens;
+            cbList_Subset(Tokens, &ExpressionTokens, 2, cbList_GetCount(Tokens) - 2);
+            
+            // Verify as sub-expression
+            Node->Right = cbParse_IsExpression(&ExpressionTokens, LineCount, ErrorList);
+            if(Node->Right == NULL)
+            {
+                cbParse_RaiseError(ErrorList, cbError_Assignment, LineCount);
+                cbLex_DeleteNode(&Node);
+            }
+        }
+    }
     
-    // First token must always be an ID
-    char* DestID = cbList_GetElement(Tokens, 0);
-    if(!cbParse_IsID(DestID, strlen(DestID)))
-        return false;
-    
-    // Second token must always be the equal op
-    char* AssignmentOp = cbList_GetElement(Tokens, 1);
-    if(strlen(AssignmentOp) != 1 || AssignmentOp[0] != '=')
-        return false;
-    
-    // The rest is assumed an expression
-    cbList ExpressionTokens;
-    cbList_Subset(Tokens, &ExpressionTokens, 2, cbList_GetCount(Tokens) - 2);
-    
-    // If is expression, valid
-    return cbParse_IsExpression(&ExpressionTokens, SymbolsTable, LineCount, ErrorList);
+    // Failed
+    return Node;
 }
 
 bool cbParse_IsID(const char* Token, size_t TokenLength)
 {
     // Note: the production rule here is complex, but can be simplified
     // to non-recursive rules
-        
+    
     // Must be at least 1 char long
     if(Token == NULL || TokenLength < 1)
         return false;
@@ -211,226 +239,95 @@ bool cbParse_IsNumString(const char* Token, size_t TokenLength)
     return false;
 }
 
-bool cbParse_IsStatementIf(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementIf(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // If production rule:
     // StatementIf -> {if(Bool) Lines end | if(Bool) Lines StatementElif? | if(Bool) Lines StatementElse?}
-    
-    // If conditions always start with if, (, <bool>, ) ..
-    if(cbList_GetCount(Tokens) < 4)
-        return false;
-    
-    // First token must be if
-    char* IfToken = cbList_GetElement(Tokens, 0);
-    if(strcmp(IfToken, "if") != 0)
-        return false;
-    
-    // Second and last token should always be '(' and ')' respectivly
-    char* FirstParenth = cbList_GetElement(Tokens, 1);
-    char* LastParenth = cbList_PeekBack(Tokens);
-    if(strcmp(FirstParenth, "(") != 0 || strcmp(LastParenth, ")") != 0)
-        return false;
-    
-    // Pase the boolean expression within the parenth
-    cbList BoolSubset;
-    cbList_Subset(Tokens, &BoolSubset, 2, cbList_GetCount(Tokens) - 3);
-    
-    // Boolean expression must be valid
-    if(!cbParse_IsBool(&BoolSubset, SymbolsTable, LineCount, ErrorList))
-        return false;
-    
-    // We can continue parsing lines, but we must remember that we are executing other statements until we hit
-    cbList_PushBack(&SymbolsTable->LocalStack, NULL); // For now, just a placeholder
-    
-    // Good to go
-    return true;
+    return cbParse_IsKeywordBoolProduction(Tokens, LineCount, ErrorList, "if", cbSymbol_StatementIf);
 }
 
-bool cbParse_IsStatementElif(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementElif(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Elif production rule:
     // StatementElif -> {elif(Bool) Lines end | elif(Bool) Lines StatementElif? | elif(Bool) Lines StatementElse?}
-    
-    // Only true if there is at least something to pop off the local conditional stack
-    if(cbList_GetCount(&SymbolsTable->LocalStack) <= 0)
-        return false;
-    
-    // If conditions always start with elif, (, <bool>, ) ..
-    if(cbList_GetCount(Tokens) < 4)
-        return false;
-    
-    // First token must be if
-    char* IfToken = cbList_GetElement(Tokens, 0);
-    if(strcmp(IfToken, "elif") != 0)
-        return false;
-    
-    // Second and last token should always be '(' and ')' respectivly
-    char* FirstParenth = cbList_GetElement(Tokens, 1);
-    char* LastParenth = cbList_PeekBack(Tokens);
-    if(strcmp(FirstParenth, "(") != 0 || strcmp(LastParenth, ")") != 0)
-        return false;
-    
-    // Pase the boolean expression within the parenth
-    cbList BoolSubset;
-    cbList_Subset(Tokens, &BoolSubset, 2, cbList_GetCount(Tokens) - 3);
-    
-    // Boolean expression must be valid
-    return cbParse_IsBool(&BoolSubset, SymbolsTable, LineCount, ErrorList);
+    return cbParse_IsKeywordBoolProduction(Tokens, LineCount, ErrorList, "elif", cbSymbol_StatementElif);
 }
 
-bool cbParse_IsStatementElse(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementElse(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Else production rule:
     // StatementElse -> {else Lines end}
-    
-    // Only true if there is at least something to pop off the local conditional stack
-    if(cbList_GetCount(&SymbolsTable->LocalStack) <= 0)
-        return false;
-    
-    // Only true if one single token: "else"
-    if(cbList_GetCount(Tokens) != 1)
-        return false;
-    
-    // Get the token; only a true else if string match
-    char* Token = cbList_PeekFront(Tokens);
-    return (strcmp(Token, "else") == 0);
+    return cbParse_IsKeywordProduction(Tokens, LineCount, ErrorList, "else", cbSymbol_StatementElse);
 }
 
-bool cbParse_IsStatementEnd(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementEnd(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
-    // Only true if there is at least something to pop off the local conditional stack
-    if(cbList_GetCount(&SymbolsTable->LocalStack) <= 0)
-        return false;
-    
-    // Only true if one single token: "end"
-    if(cbList_GetCount(Tokens) != 1)
-        return false;
-    
-    // Get the token and pop off a unit from the local stack
-    char* Token = cbList_PeekFront(Tokens);
-    if(strcmp(Token, "end") == 0)
-    {
-        cbList_PopBack(&SymbolsTable->LocalStack);
-        return true;
-    }
-    
-    // Else, not an end line
-    return false;
+    // Else production rule:
+    // StatementElse -> {else Lines end}
+    return cbParse_IsKeywordProduction(Tokens, LineCount, ErrorList, "end", cbSymbol_End);
 }
 
-bool cbParse_IsStatementWhile(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementWhile(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // While production rule:
     // StatementWhile -> {while(Bool) Lines end}
-    
-    // If it is at least four tokens: "while", parent-pair, and the bool-arg
-    size_t TokenCount = cbList_GetCount(Tokens);
-    if(TokenCount >= 4)
-    {
-        // Make sure it is "while" and parenth group
-        char* ID = cbList_PeekFront(Tokens);
-        char* StartParenth = cbList_GetElement(Tokens, 1);
-        char* EndParenth = cbList_PeekBack(Tokens);
-        if(strcmp(ID, "while") == 0 && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
-        {
-            // Make sure that the subset is a boolean expression
-            cbList ExpressionList;
-            cbList_Subset(Tokens, &ExpressionList, 2, TokenCount - 3);
-            if(cbParse_IsBool(&ExpressionList, SymbolsTable, LineCount, ErrorList))
-            {
-                // Valid, and we are starting a new local stack
-                cbList_PushBack(&SymbolsTable->LocalStack, NULL);
-                return true;
-            }
-        }
-    }
-    
-    // Failed
-    return false;
+    return cbParse_IsKeywordBoolProduction(Tokens, LineCount, ErrorList, "while", cbSymbol_StatementWhile);
 }
 
-bool cbParse_IsStatementFor(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementFor(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // For production rule:
     // StatementFor -> {for(ID, Expression, Expression, Expression) Lines end}
     
-    // If it is at least 10 tokens: "for", parenth-pair, comma delimiters, and each arg
-    size_t TokenCount = cbList_GetCount(Tokens);
-    if(TokenCount >= 10)
-    {
-        // Make sure it is "for" and parenth group
-        char* ID = cbList_PeekFront(Tokens);
-        char* StartParenth = cbList_GetElement(Tokens, 1);
-        char* EndParenth = cbList_PeekBack(Tokens);
-        if(strcmp(ID, "for") == 0 && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
-        {
-            // The first param must be an ID followed by a comma
-            char* LoopID = cbList_GetElement(Tokens, 2);
-            char* CommaID = cbList_GetElement(Tokens, 3);
-            if(cbParse_IsID(LoopID, strlen(LoopID)) && strcmp(CommaID, ",") == 0)
-            {
-                // Create a subset of the tokens left
-                cbList Subset;
-                cbList_Subset(Tokens, &Subset, 4, TokenCount - 5);
-                size_t SubsetCount = cbList_GetCount(&Subset);
-                
-                // If this is a valid expressions list and it is only three expressions...
-                size_t ExpressionCount;
-                // We NEED to know how many sub-args are at this point
-                // Thus, we need to have the actual parse tree built at this point
-                return false;
-            }
-        }
-    }
-    
-    // Failed
+    // TODO...
     return false;
 }
 
-bool cbParse_IsStatementGoto(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementGoto(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
-    // Goto statements should always be two tokens
-    if(cbList_GetCount(Tokens) != 2)
-        return false;
+    // Should be of form "goto <label name>"
+    cbLexNode* Node = NULL;
     
-    // First must always match "goto"
-    if(strcmp(cbList_GetElement(Tokens, 0), "goto") != 0)
-        return false;
+    // Must be two tokens, with the first being "goto"
+    if(cbList_GetCount(Tokens) == 2 && strcmp(cbList_GetElement(Tokens, 0), "goto") == 0)
+    {
+        // Second must always be an ID
+        char* ID = cbList_GetElement(Tokens, 1);
+        if(cbParse_IsID(ID, strlen(ID)))
+        {
+            Node = cbLex_CreateNodeSymbol(cbSymbol_StatementGoto);
+            Node->Middle = cbLex_CreateNodeS(ID);
+        }
+        else
+            cbParse_RaiseError(ErrorList, cbError_InvalidID, LineCount);
+    }
     
-    // Second must always be an ID
-    char* ID = cbList_GetElement(Tokens, 1);
-    if(!cbParse_IsID(ID, strlen(ID)))
-        return false;
-    
-    // Else, all good
-    return true;
+    return Node;
 }
 
-bool cbParse_IsStatementLabel(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsStatementLabel(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
-    // Goto statements should always be three tokens
-    if(cbList_GetCount(Tokens) != 3)
-        return false;
+    // Should be of form "label <label name>:"
+    cbLexNode* Node = NULL;
     
-    // First must always match "label"
-    if(strcmp(cbList_GetElement(Tokens, 0), "label") != 0)
-        return false;
+    // Must be two tokens, with the first being "goto"
+    if(cbList_GetCount(Tokens) == 3 && strcmp(cbList_GetElement(Tokens, 0), "label") == 0 && strcmp(cbList_GetElement(Tokens, 2), ":") == 0)
+    {
+        // Second must always be an ID
+        char* ID = cbList_GetElement(Tokens, 1);
+        if(cbParse_IsID(ID, strlen(ID)))
+        {
+            Node = cbLex_CreateNodeSymbol(cbSymbol_StatementLabel);
+            Node->Middle = cbLex_CreateNodeS(ID);
+        }
+        else
+            cbParse_RaiseError(ErrorList, cbError_InvalidID, LineCount);
+    }
     
-    // Second must always be an ID
-    char* ID = cbList_GetElement(Tokens, 1);
-    if(!cbParse_IsID(ID, strlen(ID)))
-        return false;
-    
-    // Final is just a single colon
-    char* Colon = cbList_GetElement(Tokens, 2);
-    if(strlen(Colon) != 1 || Colon[0] != ':')
-        return false;
-    
-    // Else, all good
-    return true;
+    return Node;
 }
 
-bool cbParse_IsExpression(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsExpression(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Expressions production are the largest, but not complex, group
     // Expression prodction rules:
@@ -444,6 +341,7 @@ bool cbParse_IsExpression(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t L
      Join -> {Join and Equality | Equality}
      Equality -> {Expression == Expression | Expression != Expression | Expression < Expression | Expression <= Expression | Expression > Expression | Expression >= Expression}
     */
+    cbLexNode* Node = NULL;
     
     // Function-call validation:
     // If it is at least four operators, check if we can apply the function product "ID(ExpressionList)"
@@ -456,46 +354,59 @@ bool cbParse_IsExpression(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t L
         char* EndParenth = cbList_PeekBack(Tokens);
         if(cbParse_IsID(ID, strlen(ID)) && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
         {
+            // Function call tree element
+            Node = cbLex_CreateNodeO(cbOps_Func);
+            
             // Make sure that the subset is an expression list
             cbList ExpressionList;
             cbList_Subset(Tokens, &ExpressionList, 2, TokenCount - 3);
-            if(cbParse_IsExpressionList(&ExpressionList, SymbolsTable, LineCount, ErrorList))
-                return true;
+            Node->Middle = cbParse_IsExpressionList(&ExpressionList, LineCount, ErrorList);
         }
     }
     
-    // Else, just check for regular production rules (with the fall-through case)
-    char* Operators[] = { "+", "-" };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsTerm, cbParse_IsTerm, Operators, 2);
+    // If not yet succeeded
+    if(Node == NULL)
+    {
+        // Else, just check for regular production rules (with the fall-through case)
+        char* Operators[] = { "+", "-" };
+        Node = cbParse_IsBinaryProduction(Tokens, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsTerm, cbParse_IsTerm, Operators, 2);
+    }
+    
+    return Node;
 }
 
-bool cbParse_IsExpressionList(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsExpressionList(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Expression list product rule:
     // ExpressionList -> {ExpressionList, Expression | Expression | Empty}
+    cbLexNode* Node = NULL;
     
-    // If empty, that is fine
+    // If empty, that is fine, but we don't save the symbol
     if(cbList_GetCount(Tokens) <= 0)
-        return true;
-    
+        Node = cbLex_CreateNode(cbSymbol_None); // Empty
     // Else, attempt to apply the production rule
-    char* Operators[] = { "," };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpressionList, cbParse_IsExpression, cbParse_IsExpression, Operators, 1);
+    else
+    {
+        char* Operators[] = { "," };
+        Node = cbParse_IsBinaryProduction(Tokens, LineCount, ErrorList, cbParse_IsExpressionList, cbParse_IsExpression, cbParse_IsExpression, Operators, 1);
+    }
+    
+    return Node;
 }
 
-bool cbParse_IsTerm(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsTerm(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Term Product rule:
     // Term -> {Term * Unary | Term / Unary | Term % Unary | Unary}
-    
     char* Operators[] = { "*", "/", "%" };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsTerm, cbParse_IsUnary, cbParse_IsUnary, Operators, 3);
+    return cbParse_IsBinaryProduction(Tokens, LineCount, ErrorList, cbParse_IsTerm, cbParse_IsUnary, cbParse_IsUnary, Operators, 3);
 }
 
-bool cbParse_IsUnary(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsUnary(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Unary Product rule:
     // Unary -> {!Unary | -Unary | Factor}
+    cbLexNode* Node = NULL;
     
     // Valid if first token is either '!' or '-' and a recursive unary
     char* FirstToken = cbList_PeekFront(Tokens);
@@ -503,67 +414,94 @@ bool cbParse_IsUnary(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCo
     {
         cbList Subset;
         cbList_Subset(Tokens, &Subset, 1, cbList_GetCount(Tokens) - 1);
-        if(cbParse_IsUnary(&Subset, SymbolsTable, LineCount, ErrorList))
-            return true;
+        Node = cbParse_IsUnary(&Subset, LineCount, ErrorList);
     }
     
     // If it fails, than check if this unary is actually a pure factor
-    return cbParse_IsFactor(Tokens, SymbolsTable, LineCount, ErrorList);
+    if(Node != NULL)
+        Node = cbParse_IsFactor(Tokens, LineCount, ErrorList);
+    
+    return Node;
 }
 
-bool cbParse_IsFactor(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsFactor(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Factor product rule:
     // Factor -> {(bool) | ID | 'true' | 'false' | IntString? | Float | "String Literal"}
+    cbLexNode* Node = NULL;
     
     // Either is an ID, true or false, an integer, flaot, or string literal
     if(cbList_GetCount(Tokens) == 1)
     {
         char* Token = cbList_PeekFront(Tokens);
         size_t TokenLength = strlen(Token);
-        return cbParse_IsID(Token, TokenLength) || cbParse_IsNumString(Token, TokenLength) || cbLang_IsString(Token, TokenLength);
+        
+        // Variable
+        if(cbParse_IsID(Token, TokenLength))
+            Node = cbLex_CreateNodeV(Token);
+        // String
+        else if(cbLang_IsString(Token, TokenLength))
+            Node = cbLex_CreateNodeS(Token);
+        // Boolean
+        else if(cbLang_IsBoolean(Token, TokenLength))
+            Node = cbLex_CreateNodeB((Token[0] == 't') ? true : false);
+        // Float 
+        else if(cbLang_IsFloat(Token, TokenLength))
+        {
+            float Val;
+            sscanf(Token, "%f", &Val);
+            Node = cbLex_CreateNodeF(Val);
+        }
+        // Integer
+        else if(cbLang_IsInteger(Token, TokenLength))
+        {
+            int Val;
+            sscanf(Token, "%d", &Val);
+            Node = cbLex_CreateNodeI(Val);
+        }
+        // Else, unknown
+        else
+            cbParse_RaiseError(ErrorList, cbError_UnknownToken, LineCount);
     }
-    
-    // Check boolean expression (but requires parenth surround)
-    char* StartParenth = cbList_PeekFront(Tokens);
-    char* EndParenth = cbList_PeekBack(Tokens);
-    if(strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
+    else
     {
-        // Pass without the parenth-pair
-        cbList Subset;
-        cbList_Subset(Tokens, &Subset, 1, cbList_GetCount(Tokens) - 2);
-        return cbParse_IsBool(&Subset, SymbolsTable, LineCount, ErrorList);
+        // Check boolean expression (but requires parenth surround)
+        char* StartParenth = cbList_PeekFront(Tokens);
+        char* EndParenth = cbList_PeekBack(Tokens);
+        if(strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
+        {
+            // Pass without the parenth-pair
+            cbList Subset;
+            cbList_Subset(Tokens, &Subset, 1, cbList_GetCount(Tokens) - 2);
+            Node = cbParse_IsBool(&Subset, LineCount, ErrorList);
+        }
     }
     
-    // Else, all failed
-    return false;
+    return Node;
 }
 
-bool cbParse_IsBool(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsBool(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Bool product rule:
     // Bool -> {Bool or Join | Join}
-    
     char* Operators[] = { "or" };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsBool, cbParse_IsJoin, cbParse_IsJoin, Operators, 1);
+    return cbParse_IsBinaryProduction(Tokens, LineCount, ErrorList, cbParse_IsBool, cbParse_IsJoin, cbParse_IsJoin, Operators, 1);
 }
 
-bool cbParse_IsJoin(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsJoin(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Join product rule:
     // Join -> {Join and Equality | Equality}
-    
     char* Operators[] = { "and" };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsJoin, cbParse_IsEquality, cbParse_IsEquality, Operators, 1);
+    return cbParse_IsBinaryProduction(Tokens, LineCount, ErrorList, cbParse_IsJoin, cbParse_IsEquality, cbParse_IsEquality, Operators, 1);
 }
 
-bool cbParse_IsEquality(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
+cbLexNode* cbParse_IsEquality(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 {
     // Equality product rule:
     // Equality -> {Expression == Expression | Expression != Expression | Expression < Expression | Expression <= Expression | Expression > Expression | Expression >= Expression | Expression}
-    
     char* Operators[] = { "==", "!=", "<", "<=", ">", ">=" };
-    return cbParse_IsBinaryProduction(Tokens, SymbolsTable, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsExpression, cbParse_IsExpression, Operators, 6);
+    return cbParse_IsBinaryProduction(Tokens, LineCount, ErrorList, cbParse_IsExpression, cbParse_IsExpression, cbParse_IsExpression, Operators, 6);
 }
 
 const char* cbParse_GetToken(const char* String, size_t* TokenLength)
@@ -578,7 +516,7 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
             break;
     
     // If end of string
-    if(String[Start] == '\0' || cbUtil__IsComment(String + Start))
+    if(String[Start] == '\0' || cbUtil_IsComment(String + Start))
         return NULL;
     
     // If this is a string literal (must be in quotes), seek until next quote
@@ -593,7 +531,7 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
                 End++;
                 break;
             }
-            else if(String[End] == '\n' || cbUtil__IsComment(String + End))
+            else if(String[End] == '\n' || cbUtil_IsComment(String + End))
                 break;
         }
     }
@@ -617,7 +555,7 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
     {
         // If white space or a special single-char, just stop
         for(End = Start; End < StringLength; End++)
-            if(isspace(String[End]) || !isalnum(String[End]) || cbUtil__IsComment(String + Start))
+            if(isspace(String[End]) || !isalnum(String[End]) || cbUtil_IsComment(String + Start))
                 break;
     }
     
@@ -626,7 +564,50 @@ const char* cbParse_GetToken(const char* String, size_t* TokenLength)
     return String + Start;
 }
 
-bool cbParse_IsBinaryProduction(cbList* Tokens, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList, __cbParse_IsProduct(SymbolA), __cbParse_IsProduct(SymbolB), __cbParse_IsProduct(SymbolC), char** DelimList, size_t DelimCount)
+cbLexNode* cbParse_IsKeywordProduction(cbList* Tokens, size_t LineCount, cbList* ErrorList,  const char* Keyword, cbSymbol Symbol)
+{
+    // Single keyword
+    if(cbList_GetCount(Tokens) == 1)
+    {
+        char* Token = cbList_PeekFront(Tokens);
+        if(strcmp(Token, Keyword) == 0)
+            return cbLex_CreateNodeSymbol(Symbol);
+    }
+    
+    // Failed
+    return NULL;
+}
+
+cbLexNode* cbParse_IsKeywordBoolProduction(cbList* Tokens, size_t LineCount, cbList* ErrorList, const char* Keyword, cbSymbol Symbol)
+{
+    // If production rule: a -> {Keyword(Bool)}
+    cbLexNode* Node = NULL;
+    
+    // If conditions always start with keyword, (, <bool>, ) ..
+    if(cbList_GetCount(Tokens) >= 4)
+    {
+        // First token must be the keyword and second and last token should always be '(' and ')' respectivly
+        char* IfToken = cbList_GetElement(Tokens, 0);
+        char* FirstParenth = cbList_GetElement(Tokens, 1);
+        char* LastParenth = cbList_PeekBack(Tokens);
+        if(strcmp(IfToken, Keyword) == 0 && strcmp(FirstParenth, "(") == 0 && strcmp(LastParenth, ")") == 0)
+        {
+            // Valid keyword, save the boolean expression within self
+            Node = cbLex_CreateNodeSymbol(Symbol);
+            
+            // Pase the boolean expression within the parenth
+            cbList BoolSubset;
+            cbList_Subset(Tokens, &BoolSubset, 2, cbList_GetCount(Tokens) - 3);
+            
+            // Boolean expression must be valid
+            Node->Middle = cbParse_IsBool(&BoolSubset, LineCount, ErrorList);
+        }
+    }
+    
+    return Node;
+}
+
+cbLexNode* cbParse_IsBinaryProduction(cbList* Tokens, size_t LineCount, cbList* ErrorList, __cbParse_IsProduct(SymbolA), __cbParse_IsProduct(SymbolB), __cbParse_IsProduct(SymbolC), char** DelimList, size_t DelimCount)
 {
     /*
      A helper function to apply production rules to a list of tokens and binary operators. This means
@@ -637,22 +618,20 @@ bool cbParse_IsBinaryProduction(cbList* Tokens, cbSymbolsTable* SymbolsTable, si
      Note that these operators are only examples, but an arbitrary list of strings can be given of arbitrary
      length. Also note that the "fall-through" rule is optional: if NULL is passed, it is not attempted.
     */
-    
-    // Number of tokens and default to no known production state
-    size_t TokenCount = cbList_GetCount(Tokens);
-    bool IsValid = false;
+    cbLexNode* Node = NULL;
     
     // Must have a minimum of three tokens
+    size_t TokenCount = cbList_GetCount(Tokens);
     if(TokenCount >= 3)
     {
         // For each possible operator position
-        for(int i = 1; i < TokenCount - 1 && !IsValid; i++)
+        for(int i = 1; i < TokenCount - 1 && Node == NULL; i++)
         {
             // Get this token, which if is an op, we split around for a left and right list
             char* Token = cbList_GetElement(Tokens, i);
             
             // For each operator
-            for(int j = 0; j < DelimCount && !IsValid; j++)
+            for(int j = 0; j < DelimCount && Node == NULL; j++)
             {
                 // If we have a match...
                 if(strcmp(Token, DelimList[j]) == 0)
@@ -666,7 +645,24 @@ bool cbParse_IsBinaryProduction(cbList* Tokens, cbSymbolsTable* SymbolsTable, si
                     cbList_Subset(Tokens, &RightList, RightStart, TokenCount - RightStart);
                     
                     // Validate "Expression + Term" or "Expression - Term"
-                    IsValid = SymbolA(&LeftList, SymbolsTable, LineCount, ErrorList) && SymbolB(&RightList, SymbolsTable, LineCount, ErrorList);
+                    cbLexNode* LeftProduct = SymbolA(&LeftList, LineCount, ErrorList);
+                    cbLexNode* RightProduct = SymbolB(&RightList, LineCount, ErrorList);
+                    
+                    // If both are valid and we have an op, form a node
+                    cbOps Op;
+                    bool ValidOp = cbUtil_OpFromStr(DelimList[j], &Op);
+                    if(LeftProduct != NULL && RightProduct != NULL && ValidOp)
+                    {
+                        Node = cbLex_CreateNodeO(Op);
+                        Node->Left = LeftProduct;
+                        Node->Right = RightProduct;
+                    }
+                    
+                    // Release left or right on failure
+                    if(LeftProduct != NULL)
+                        cbLex_DeleteNode(&LeftProduct);
+                    if(RightProduct != NULL)
+                        cbLex_DeleteNode(&RightProduct);
                 }
             }
         }
@@ -674,11 +670,11 @@ bool cbParse_IsBinaryProduction(cbList* Tokens, cbSymbolsTable* SymbolsTable, si
     
     // If the calling function defined a "fall-through" symbol, and we don't have
     // a valid product yet, call it
-    if(!IsValid && SymbolC != NULL)
-        IsValid = SymbolC(Tokens, SymbolsTable, LineCount, ErrorList);
+    if(Node == NULL && SymbolC != NULL)
+        Node = SymbolC(Tokens, LineCount, ErrorList);
     
     // All done
-    return IsValid;
+    return Node;
 }
 
 void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
@@ -690,4 +686,90 @@ void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
     
     // Insert into list
     cbList_PushBack(ErrorList, NewError);
+}
+
+cbLexNode* cbLex_CreateNode(cbLexNodeType Type)
+{
+    cbLexNode* Node = malloc(sizeof(cbLexNode));
+    Node->Type = Type;
+    Node->Left = Node->Middle = Node->Right = NULL;
+    return Node;
+}
+
+cbLexNode* cbLex_CreateNodeSymbol(cbSymbol Symbol)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Symbol);
+    Node->Data.Symbol = Symbol;
+    return Node;
+}
+
+cbLexNode* cbLex_CreateNodeI(int Integer)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    Node->Data.Terminal.Type = cbLexIDType_Int;
+    Node->Data.Terminal.Data.Integer = Integer;
+    return Node;
+}
+
+cbLexNode* cbLex_CreateNodeF(float Float)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    Node->Data.Terminal.Type = cbLexIDType_Float;
+    Node->Data.Terminal.Data.Float = Float;
+    return Node;
+}
+
+cbLexNode* cbLex_CreateNodeB(bool Boolean)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    Node->Data.Terminal.Type = cbLexIDType_Bool;
+    Node->Data.Terminal.Data.Boolean = Boolean;
+    return Node;
+}
+
+cbLexNode* cbLex_CreateNodeS(const char* StringLiteral)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    Node->Data.Terminal.Type = cbLexIDType_StringLit;
+    Node->Data.Terminal.Data.String = cbUtil_stralloc(StringLiteral);
+    return Node;
+}
+
+cbLexNode* cbLex_CreateNodeV(const char* VariableName)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    Node->Data.Terminal.Type = cbLexIDType_Variable;
+    Node->Data.Terminal.Data.String = cbUtil_stralloc(VariableName);
+    return Node;
+}
+
+cbLexNode* cbLex_CreateNodeO(cbOps Op)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    Node->Data.Terminal.Type = cbLexIDType_Op;
+    Node->Data.Terminal.Data.Op = Op;
+    return Node;
+}
+
+void cbLex_DeleteNode(cbLexNode** Node)
+{
+    // If null, ignore
+    if(Node == NULL || *Node == NULL)
+        return;
+    
+    // Go bottom up: remove children first, then self
+    cbLex_DeleteNode(&(*Node)->Left);
+    cbLex_DeleteNode(&(*Node)->Middle);
+    cbLex_DeleteNode(&(*Node)->Right);
+    
+    // Release data
+    if((*Node)->Type == cbLexNodeType_Terminal)
+    {
+        if((*Node)->Data.Terminal.Type == cbLexIDType_StringLit || (*Node)->Data.Terminal.Type == cbLexIDType_Variable)
+            free((*Node)->Data.Terminal.Data.String);
+    }
+    
+    // Release self and set to NULL
+    free(*Node);
+    *Node = NULL;
 }

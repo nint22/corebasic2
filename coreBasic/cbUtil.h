@@ -109,7 +109,10 @@ inline char* cbUtil_stralloc(const char* str);
 inline char* cbUtil_strnalloc(const char* str, size_t strlength);
 
 // Returns true if the given string starts with a double-slash c-style comment
-inline bool cbUtil__IsComment(const char* str);
+inline bool cbUtil_IsComment(const char* str);
+
+// Returns the op associated with the given string, or Op_None if not found
+bool cbUtil_OpFromStr(const char* str, cbOps* OutOp);
 
 // Min/max integer functions
 inline int g2Util_imin(int a, int b);

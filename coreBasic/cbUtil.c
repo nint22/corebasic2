@@ -193,7 +193,7 @@ bool cbList_CompareInt(void* A, void* B)
     
     if(VarA->Type != VarB->Type)
         return false;
-    else if(VarA->Type == cbType_Int && VarA->Data.Int != VarB->Data.Int)
+    else if(VarA->Type == cbVariableType_Int && VarA->Data.Int != VarB->Data.Int)
         return false;
     // TODO: bool, string, float for comparison functions
     
@@ -241,7 +241,7 @@ char* cbUtil_strnalloc(const char* str, size_t strlength)
     return strcopy;
 }
 
-bool cbUtil__IsComment(const char* str)
+bool cbUtil_IsComment(const char* str)
 {
     // Ignore if null too early
     if(str == NULL || str[0] == '\0' || str[1] == '\0')
@@ -251,6 +251,62 @@ bool cbUtil__IsComment(const char* str)
     
     // Fall through: some other char-pair
     return false;
+}
+
+bool cbUtil_OpFromStr(const char* str, cbOps* OutOp)
+{
+    // If single-char
+    if(strlen(str) == 1)
+    {
+        switch(str[0])
+        {
+            case '=':   *OutOp = cbOps_Set;     break;
+            case '!':   *OutOp = cbOps_Not;     break;
+            case '*':   *OutOp = cbOps_Mul;     break;
+            case '/':   *OutOp = cbOps_Div;     break;
+            case '%':   *OutOp = cbOps_Mod;     break;
+            case '+':   *OutOp = cbOps_Add;     break;
+            case '-':   *OutOp = cbOps_Sub;     break;
+            case '<':   *OutOp = cbOps_Less;    break;
+            case '>':   *OutOp = cbOps_Greater; break;
+            default: return false;
+        }
+        return true;
+    }
+    else if(strcmp(str, ">="))
+    {
+        *OutOp = cbOps_GreaterEq;
+        return true;
+    }
+    else if(strcmp(str, "<="))
+    {
+        *OutOp = cbOps_LessEq;
+        return true;
+    }
+    else if(strcmp(str, "=="))
+    {
+        *OutOp = cbOps_Eq;
+        return true;
+    }
+    else if(strcmp(str, "!="))
+    {
+        *OutOp = cbOps_NotEq;
+        return true;
+    }
+    else if(strcmp(str, "and"))
+    {
+        *OutOp = cbOps_And;
+        return true;
+    }
+    else if(strcmp(str, "or"))
+    {
+        *OutOp = cbOps_Or;
+        return true;
+    }
+    
+    // Nothing found
+    return false;
+    
 }
 
 int g2Util_imin(int a, int b)

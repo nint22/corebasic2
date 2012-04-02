@@ -264,15 +264,15 @@ void cbDebug_PrintMemory(cbVirtualMachine* Processor, FILE* OutHandle)
         
         fprintf(OutHandle, " %04lu: ", VariableIndex * sizeof(cbVariable));
         
-        if(Variable->Type == cbType_Int)
+        if(Variable->Type == cbVariableType_Int)
             fprintf(OutHandle, " [Integer ]  %d\n", Variable->Data.Int);
-        else if(Variable->Type == cbType_Bool)
+        else if(Variable->Type == cbVariableType_Bool)
             fprintf(OutHandle, " [Bool    ]  %s\n", Variable->Data.Bool ? "true" : "false");
-        else if(Variable->Type == cbType_Float)
+        else if(Variable->Type == cbVariableType_Float)
             fprintf(OutHandle, " [Float   ]  %f\n", Variable->Data.Float);
-        else if(Variable->Type == cbType_String)
+        else if(Variable->Type == cbVariableType_String)
             fprintf(OutHandle, " [String  ]  %lu: %s\n", (size_t)Variable->Data.String, (char*)(Processor->Memory + Processor->DataPointer + (size_t)Variable->Data.String));
-        else if(Variable->Type == cbType_String)
+        else if(Variable->Type == cbVariableType_String)
             fprintf(OutHandle, " [Offset  ]  %d\n", Variable->Data.Offset);
     }
     

@@ -84,7 +84,7 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
         case cbOps_LoadVar:
             // Stack grows, and set variable to be a reference to the var from the base stack address
             Processor->StackPointer -= sizeof(cbVariable);
-            ((cbVariable*)((char*)Processor->Memory + Processor->StackPointer))->Type = cbType_Offset;
+            ((cbVariable*)((char*)Processor->Memory + Processor->StackPointer))->Type = cbVariableType_Offset;
             ((cbVariable*)((char*)Processor->Memory + Processor->StackPointer))->Data.Offset = Instruction->Arg;
             break;
         case cbOps_AddStack:
@@ -172,7 +172,7 @@ void cbStep_ReleaseInterrupt(cbVirtualMachine* Processor, const char* UserInput)
     {
         // Turn into integer
         cbVariable UserVar;
-        UserVar.Type = cbType_Int;
+        UserVar.Type = cbVariableType_Int;
         UserVar.Data.Int = UserInput[0];
         
         Processor->StackPointer -= sizeof(cbVariable);
@@ -189,17 +189,17 @@ void cbStep_ReleaseInterrupt(cbVirtualMachine* Processor, const char* UserInput)
         
         if(cbLang_IsInteger(UserInput, UserInputLength))
         {
-            UserVar.Type = cbType_Int;
+            UserVar.Type = cbVariableType_Int;
             sscanf(UserInput, "%d", &UserVar.Data.Int);
         }
         else if(cbLang_IsFloat(UserInput, UserInputLength))
         {
-            UserVar.Type = cbType_Float;
+            UserVar.Type = cbVariableType_Float;
             sscanf(UserInput, "%f", &UserVar.Data.Float);
         }
         else if(cbLang_IsBoolean(UserInput, UserInputLength))
         {
-            UserVar.Type = cbType_Bool;
+            UserVar.Type = cbVariableType_Bool;
             if(UserInput[0] == 't')
                 UserVar.Data.Bool = true;
             else
@@ -208,7 +208,7 @@ void cbStep_ReleaseInterrupt(cbVirtualMachine* Processor, const char* UserInput)
         else // Not supported
         {
             // Post -1 [int]
-            UserVar.Type = cbType_Int;
+            UserVar.Type = cbVariableType_Int;
             UserVar.Data.Int = -1;
         }
         
@@ -237,17 +237,17 @@ cbError cbStep_MathOp(cbVirtualMachine* Processor, cbInstruction* Instruction)
     cbVariable* Out = B;
     
     // If A or B is an offset (i.e. pointer), correctly point to the variable itself, and not the reference
-    if(A->Type == cbType_Offset)
+    if(A->Type == cbVariableType_Offset)
         A = (cbVariable*)((char*)Processor->Memory + Processor->StackBasePointer + A->Data.Offset);
-    if(B->Type == cbType_Offset)
+    if(B->Type == cbVariableType_Offset)
         B = (cbVariable*)((char*)Processor->Memory + Processor->StackBasePointer + B->Data.Offset);
     
     // Only integers are supported at the moment
-    if(A->Type != cbType_Int || B->Type != cbType_Int)
+    if(A->Type != cbVariableType_Int || B->Type != cbVariableType_Int)
         return cbError_TypeMismatch;
     
     // The output, for now, will always be integers
-    Out->Type = cbType_Int;
+    Out->Type = cbVariableType_Int;
     
     /*** Apply Operands ***/
     
@@ -290,11 +290,11 @@ cbError cbStep_Store(cbVirtualMachine* Processor, cbInstruction* Instruction)
     Processor->StackPointer += sizeof(cbVariable);
     
     // If A is an offset (i.e. pointer), correctly point to the variable itself, and not the reference
-    if(A->Type == cbType_Offset)
+    if(A->Type == cbVariableType_Offset)
         A = (cbVariable*)((char*)Processor->Memory + Processor->StackBasePointer + A->Data.Offset);
     
     // If B is not a variable, fail out
-    if(B->Type != cbType_Offset)
+    if(B->Type != cbVariableType_Offset)
         return cbError_ConstSet;
     // Else, good
     else
@@ -314,12 +314,12 @@ cbError cbStep_Disp(cbVirtualMachine* Processor, cbInstruction* Instruction)
     Processor->StackPointer += sizeof(cbVariable);
     
     // Dereference if needed
-    if(A->Type == cbType_Offset)
+    if(A->Type == cbVariableType_Offset)
         A = (cbVariable*)((char*)Processor->Memory + Processor->StackBasePointer + A->Data.Offset);
     
-    if(A->Type == cbType_Int)
+    if(A->Type == cbVariableType_Int)
         fprintf(Processor->StreamOut, "%d", A->Data.Int);
-    else if(A->Type == cbType_String)
+    else if(A->Type == cbVariableType_String)
     {
         // Pull out the string
         char* String = (char*)((char*)Processor->Memory + Processor->DataPointer + (size_t)A->Data.String);
@@ -354,7 +354,7 @@ cbError cbStep_If(cbVirtualMachine* Processor, cbInstruction* Instruction)
     Processor->StackPointer += sizeof(cbVariable);
     
     // Is this variable false?
-    if(A->Type != cbType_Int)
+    if(A->Type != cbVariableType_Int)
         return cbError_TypeMismatch;
     
     // Jump outside of conditional block to the instruction above target (at bottom of VM loop, we grow instruction)
@@ -381,17 +381,17 @@ cbError cbStep_CompOp(cbVirtualMachine* Processor, cbInstruction* Instruction)
     cbVariable* Out = B;
     
     // If A or B is an offset (i.e. pointer), correctly point to the variable itself, and not the reference
-    if(A->Type == cbType_Offset)
+    if(A->Type == cbVariableType_Offset)
         A = (cbVariable*)((char*)Processor->Memory + Processor->StackBasePointer + A->Data.Offset);
-    if(B->Type == cbType_Offset)
+    if(B->Type == cbVariableType_Offset)
         B = (cbVariable*)((char*)Processor->Memory + Processor->StackBasePointer + B->Data.Offset);
     
     // Only integers are supported at the moment
-    if(A->Type != cbType_Int || B->Type != cbType_Int)
+    if(A->Type != cbVariableType_Int || B->Type != cbVariableType_Int)
         return cbError_TypeMismatch;
     
     // The output, for now, will always be integers
-    Out->Type = cbType_Int;
+    Out->Type = cbVariableType_Int;
     
     /*** Apply Logic ***/
     
@@ -432,14 +432,14 @@ cbError cbStep_LogicOp(cbVirtualMachine* Processor, cbInstruction* Instruction)
     Processor->StackPointer += sizeof(cbVariable);
     
     // If offset, not actual variable, point to the true variable
-    if(A->Type == cbType_Offset)
+    if(A->Type == cbVariableType_Offset)
         A = (cbVariable*)(Processor->Memory + Processor->StackBasePointer + A->Data.Offset);
     
     // If the not operator, apply it just on the one variable A
     if(Instruction->Op == cbOps_Not)
     {
         // Only support boolean or integers
-        if(A->Type != cbType_Int && A->Type != cbType_Bool)
+        if(A->Type != cbVariableType_Int && A->Type != cbVariableType_Bool)
             return cbError_TypeMismatch;
         
         // Apply not-op
@@ -451,11 +451,11 @@ cbError cbStep_LogicOp(cbVirtualMachine* Processor, cbInstruction* Instruction)
     {
         // Get the second variable out
         cbVariable* B = (cbVariable*)(Processor->Memory + Processor->StackPointer);
-        if(B->Type == cbType_Offset)
+        if(B->Type == cbVariableType_Offset)
             B = (cbVariable*)(Processor->Memory + Processor->StackBasePointer + B->Data.Offset);
         
         // Only support boolean or integers
-        if(A->Type != cbType_Int && A->Type != cbType_Bool && B->Type != cbType_Int && B->Type != cbType_Bool)
+        if(A->Type != cbVariableType_Int && A->Type != cbVariableType_Bool && B->Type != cbVariableType_Int && B->Type != cbVariableType_Bool)
             return cbError_TypeMismatch;
         
         // Apply 'and' op
@@ -486,17 +486,17 @@ cbError cbStep_Output(cbVirtualMachine* Processor, cbInstruction* Instruction)
     Processor->StackPointer += sizeof(cbVariable);
     
     // If offset, not actual variable, point to the true variable
-    if(X->Type == cbType_Offset)
+    if(X->Type == cbVariableType_Offset)
         X = (cbVariable*)(Processor->Memory + Processor->StackBasePointer + X->Data.Offset);
-    if(Y->Type == cbType_Offset)
+    if(Y->Type == cbVariableType_Offset)
         Y = (cbVariable*)(Processor->Memory + Processor->StackBasePointer + Y->Data.Offset);
-    if(C->Type == cbType_Offset)
+    if(C->Type == cbVariableType_Offset)
         C = (cbVariable*)(Processor->Memory + Processor->StackBasePointer + C->Data.Offset);
     
     /*** Render on-screen ***/
     
     // Type check
-    if(X->Type != cbType_Int || Y->Type != cbType_Int || C->Type != cbType_Int)
+    if(X->Type != cbVariableType_Int || Y->Type != cbVariableType_Int || C->Type != cbVariableType_Int)
         return cbError_TypeMismatch;
     
     // Bounds check

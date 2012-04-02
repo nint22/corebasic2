@@ -17,116 +17,6 @@
 
 #include "cbUtil.h"
 
-/*** Context-Free Grammar Language Definition ***/
-
-// Based on the CFG formal language defintion found
-// here: code.google.com/p/corebasic/wiki/cBasic
-// Basic rule is: Symbol -> string of terminals
-
-// Note that the production rules are implemented as functions within cbLang
-
-// Symbols list
-static const int cbSymbolCount = 25;
-typedef enum __cbSymbol
-{
-    // Character and string type definitions
-    cbSymbol_NumChar,
-    cbSymbol_AlphaChar,
-    cbSymbol_AlphaNumChar,
-    cbSymbol_AlphaString,
-    cbSymbol_NumString,
-    cbSymbol_AlphaNumString,
-    cbSymbol_ID,
-    
-    // Basic Structures
-    // All production rules should derive from here
-    cbSymbol_Line,
-    cbSymbol_Statements,
-    cbSymbol_Statement,
-    cbSymbol_Declaration,
-    
-    // Statements
-    cbSymbol_StatementIf,
-    cbSymbol_StatementElif,
-    cbSymbol_StatementElse,
-    cbSymbol_StatementWhile,
-    cbSymbol_StatementFor,
-    cbSymbol_StatementGoto,
-    cbSymbol_StatementLabel,
-    
-    // Expressions
-    cbSymbol_Bool,
-    cbSymbol_Join,
-    cbSymbol_Equality,
-    cbSymbol_Expression,
-    cbSymbol_Term,
-    cbSymbol_Unary,
-    cbSymbol_Factor,
-} cbSymbol;
-
-/*** Variable Type Definition ***/
-
-// Data types
-typedef enum __cbType
-{
-    cbType_Int,
-    cbType_Float,
-    cbType_Bool,
-    cbType_String,
-    cbType_Offset, // Equivalent to a pointer (internal use only)
-} cbType;
-
-// Variable holders
-typedef struct __cbVariable
-{
-    cbType Type;
-    union
-    {
-        int Int;
-        float Float;
-        bool Bool;
-        char* String;
-        int Offset;
-    } Data;
-} cbVariable;
-
-
-/*** Lexical / Symbol-Products Tree ***/
-
-// Internal symbols table for parsing
-typedef struct __cbSymbolsTable
-{
-    // Local stack (loops and conditionals)
-    cbList LocalStack;
-    
-} cbSymbolsTable;
-
-// Define the types of lexical-analysis nodes in a lex-tree
-typedef enum __cbLexNodeType
-{
-    cbLexNodeType_Symbol,   // Defines a Symbol -> Product relationship
-    cbLexNodeType_Terminal, // Define a Product -> Terminal relationship
-} cbLexNodeType;
-
-// Define
-typedef struct __cbLexNode
-{
-    // What kind of lex-node is this?
-    cbLexNodeType Type;
-    
-    // Lex content
-    union // Anonymous
-    {
-        cbSymbol Symbol;
-        cbVariable Terminal;
-    } Data;
-    
-    // Left and right nodes in our binary tree
-    struct __cbLexNode* Left;
-    struct __cbLexNode* Right;
-    
-} cbLexNode;
-
 /*** Machine / Simulation Definition ***/
 
 // Interrupt types (only three actual interrupts, one "none")
@@ -324,12 +214,162 @@ static const char cbOpsNames[cbOpsCount][16] =
     "nop",
 };
 
+/*** Context-Free Grammar Language Definition ***/
+
+// Based on the CFG formal language defintion found
+// here: code.google.com/p/corebasic/wiki/cBasic
+// Basic rule is: Symbol -> string of terminals
+
+// Note that the production rules are implemented as functions within cbLang
+
+// Symbols list
+static const int cbSymbolCount = 28;
+typedef enum __cbSymbol
+{
+    // No symbol / undef
+    cbSymbol_None,
+    
+    // Character and string type definitions
+    cbSymbol_NumChar,
+    cbSymbol_AlphaChar,
+    cbSymbol_AlphaNumChar,
+    cbSymbol_AlphaString,
+    cbSymbol_NumString,
+    cbSymbol_AlphaNumString,
+    cbSymbol_ID,
+    
+    // Basic Structures
+    // All production rules should derive from here
+    cbSymbol_Line,
+    cbSymbol_Statements,
+    cbSymbol_Statement,
+    cbSymbol_Declaration,
+    
+    // Statements
+    cbSymbol_StatementIf,
+    cbSymbol_StatementElif,
+    cbSymbol_StatementElse,
+    cbSymbol_StatementWhile,
+    cbSymbol_StatementFor,
+    cbSymbol_StatementGoto,
+    cbSymbol_StatementLabel,
+    
+    // Expressions
+    cbSymbol_Bool,
+    cbSymbol_Join,
+    cbSymbol_Equality,
+    cbSymbol_Expression,
+    cbSymbol_ExpressionList,
+    cbSymbol_Term,
+    cbSymbol_Unary,
+    cbSymbol_Factor,
+    
+    // Misc.
+    cbSymbol_End,
+} cbSymbol;
+
+/*** Variable Type Definition ***/
+
+// Data types
+typedef enum __cbVariableType
+{
+    cbVariableType_Int,
+    cbVariableType_Float,
+    cbVariableType_Bool,
+    cbVariableType_String,
+    cbVariableType_Offset, // Equivalent to a pointer (internal use only)
+} cbVariableType;
+
+// Variable holders
+typedef struct __cbVariable
+{
+    cbVariableType Type;
+    union
+    {
+        int Int;
+        float Float;
+        bool Bool;
+        char* String;
+        int Offset;
+    } Data;
+} cbVariable;
+
+
+/*** Lexical / Symbol-Products Tree ***/
+
+// Define the types of lexical-analysis nodes in a lex-tree
+typedef enum __cbLexNodeType
+{
+    cbLexNodeType_Symbol,   // Defines a Symbol -> Product relationship
+    cbLexNodeType_Terminal, // Define a Product -> Terminal relationship
+} cbLexNodeType;
+
+typedef enum __cbLexIDType
+{
+    cbLexIDType_Int,
+    cbLexIDType_Float,
+    cbLexIDType_Bool,
+    cbLexIDType_StringLit,
+    cbLexIDType_Variable,   // Still uses the same string buffer
+    cbLexIDType_Op,
+} cbLexIDType;
+
+
+// Lexical analysis token ID
+typedef struct __cbLexID
+{
+    // Note that "cbType_Offset" represents a variable name (stored in string)
+    cbLexIDType Type;
+    union
+    {
+        int Integer;
+        float Float;
+        bool Boolean;
+        char* String;
+        cbOps Op;
+    } Data;
+    
+    // Line this token was read from
+    size_t LineNumber;
+} cbLexID;
+
+// Define
+typedef struct __cbLexNode
+{
+    // What kind of lex-node is this?
+    cbLexNodeType Type;
+    
+    // Lex content
+    union // Anonymous
+    {
+        cbSymbol Symbol;        // Symbol type (Expression, Statement, etc..)
+        cbLexID Terminal;       // Operators, literals, and variables (123, "abc", True, etc..)
+    } Data;
+    
+    // Left and right nodes in our binary tree
+    struct __cbLexNode* Left;
+    struct __cbLexNode* Middle; // Only used with ops
+    struct __cbLexNode* Right;
+    
+} cbLexNode;
+
+// Internal symbols table for parsing, lex-tree building, etc.
+typedef struct __cbSymbolsTable
+{
+    // Number of block stacks (loops and conditionals)
+    size_t BlockStack;
+    
+    // A root node for each line of code
+    cbList LexTree;
+    
+} cbSymbolsTable;
+
 /*** Error Reporting ***/
 
 // Failure reasons
 // Note that these are both parsing, compiling,
 // and run-time error definitions
-static const int cbErrorCount = 17;
+static const int cbErrorCount = 18;
 typedef enum __cbError
 {
     cbError_None,
@@ -342,13 +382,14 @@ typedef enum __cbError
     cbError_TypeMismatch,
     cbError_ParenthMismatch,
     cbError_Halted,
-    cbError_ConstSet,
+    cbError_Assignment,
     cbError_BlockMismatch,
     cbError_ParseInt,
     cbError_ParseFloat,
     cbError_MissingArgs,
     cbError_MissingLabel,
     cbError_InvalidID,
+    cbError_ConstSet,
 } cbError;
 
 // English-language error names
@@ -364,13 +405,14 @@ static const char cbErrorNames[cbErrorCount][64] =
     "Type mismatch",
     "Parentheses mismatch",
     "Process halted",
-    "A literal is being assigned",
+    "Cannot assign expression",
     "Block mismatch",
     "Failed to parse integer",
     "Failed to parse float",
     "Missing arguments",
     "Missing label",
     "Invalid variable name",
+    "Assigning a constant",
 };
 
 // Define a parsing error which is an error code and a line number
