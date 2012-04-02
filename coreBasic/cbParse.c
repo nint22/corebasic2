@@ -10,12 +10,11 @@
 
 #include "cbParse.h"
 
-void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
+bool cbParse_ParseProgram(const char* Program, cbList* ErrorList, cbSymbolsTable* SymbolsTable)
 {
     // Create our symbols table (just for lexical analysis help for now)
-    cbSymbolsTable SymbolsTable;
-    SymbolsTable.BlockStack = 0;
-    cbList_Init(&SymbolsTable.LexTree);
+    SymbolsTable->BlockStack = 0;
+    cbList_Init(&SymbolsTable->LexTree);
     
     // Keep an active token pointer; this changes over time
     const char* ActiveLine = Program;
@@ -27,9 +26,9 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
     while(true)
     {
         // Parse this line
-        cbLexNode* LexTree = cbParse_ParseLine(ActiveLine, &SymbolsTable, LineCount, ErrorList);
+        cbLexNode* LexTree = cbParse_ParseLine(ActiveLine, SymbolsTable, LineCount, ErrorList);
         if(LexTree != NULL)
-            cbList_PushBack(&SymbolsTable.LexTree, LexTree);
+            cbList_PushBack(&SymbolsTable->LexTree, LexTree);
         
         // Get the next new-line
         ActiveLine = strchr(ActiveLine, '\n');
@@ -46,10 +45,11 @@ void cbParse_ParseProgram(const char* Program, cbList* ErrorList)
     }
     
     // If the local stack is not empty, then there is a dangling end-block
-    if(SymbolsTable.BlockStack > 0)
+    if(SymbolsTable->BlockStack > 0)
         cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
     
-    // Done parsing
+    // Done parsing, return the symbols table
+    return cbList_GetCount(ErrorList) <= 0;
 }
 
 cbLexNode* cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, size_t LineCount, cbList* ErrorList)
@@ -86,7 +86,7 @@ cbLexNode* cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, siz
         // Line production rule:
         // Line -> {Statement | Declaration}, but if we have an active conditional stack, validate elif, else, and end product ruels
         LexTree = cbParse_IsDeclaration(&Tokens, LineCount, ErrorList);
-        if(LexTree != NULL)
+        if(LexTree == NULL)
             LexTree = cbParse_IsStatement(&Tokens, SymbolsTable, LineCount, ErrorList);
         
         // On error
@@ -418,7 +418,7 @@ cbLexNode* cbParse_IsUnary(cbList* Tokens, size_t LineCount, cbList* ErrorList)
     }
     
     // If it fails, than check if this unary is actually a pure factor
-    if(Node != NULL)
+    if(Node == NULL)
         Node = cbParse_IsFactor(Tokens, LineCount, ErrorList);
     
     return Node;
@@ -657,12 +657,14 @@ cbLexNode* cbParse_IsBinaryProduction(cbList* Tokens, size_t LineCount, cbList* 
                         Node->Left = LeftProduct;
                         Node->Right = RightProduct;
                     }
-                    
                     // Release left or right on failure
-                    if(LeftProduct != NULL)
-                        cbLex_DeleteNode(&LeftProduct);
-                    if(RightProduct != NULL)
-                        cbLex_DeleteNode(&RightProduct);
+                    else
+                    {
+                        if(LeftProduct != NULL)
+                            cbLex_DeleteNode(&LeftProduct);
+                        if(RightProduct != NULL)
+                            cbLex_DeleteNode(&RightProduct);
+                    }
                 }
             }
         }

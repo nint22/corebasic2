@@ -22,13 +22,12 @@
 // This is used heavily when doing production evaluation with the CFG
 #define __cbParse_IsProduct(x) cbLexNode* (x)(cbList* Tokens, size_t LineCount, cbList* ErrorList)
 
-/*** Main Lexical and Compiler Entry Points ***/
+/*** Main Parsing and Lexical Entry Points ***/
 
-// Main parsing function; the root of all parsing events
-void cbParse_ParseProgram(const char* Program, cbList* ErrorList);
-
-// Main compiler function; the root of all compilation
-//void cbParse_CompileProgram(cbList* ErrorList);
+// Main parsing function; the root of all parsing events. Returns true on success or false on failure
+// for the processing and lexical analysis. Errors are posted to the error list object, and a symbols
+// table is returned containing the per-line lexical analysis (i.e. parsing tree)
+bool cbParse_ParseProgram(const char* Program, cbList* ErrorList, cbSymbolsTable* SymbolsTable);
 
 /*** Lexer / Parsing Functions ***/
 
