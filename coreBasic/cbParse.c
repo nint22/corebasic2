@@ -161,11 +161,11 @@ cbLexNode* cbParse_IsDeclaration(cbList* Tokens, size_t LineCount, cbList* Error
         if(cbParse_IsID(DestID, strlen(DestID)) && strcmp(AssignmentOp, "=") == 0)
         {
             // Create node for this symbol
-            Node = cbLex_CreateNodeSymbol(cbSymbol_Declaration);
+            Node = cbLex_CreateNodeSymbol(cbSymbol_Declaration, LineCount);
             
             // Save ID and op into the parse-tree
-            Node->Left = cbLex_CreateNodeV(DestID);
-            Node->Middle = cbLex_CreateNodeO(cbOps_Set);
+            Node->Left = cbLex_CreateNodeV(DestID, LineCount);
+            Node->Middle = cbLex_CreateNodeO(cbOps_Set, LineCount);
             
             // The rest is assumed an expression
             cbList ExpressionTokens;
@@ -295,8 +295,8 @@ cbLexNode* cbParse_IsStatementGoto(cbList* Tokens, size_t LineCount, cbList* Err
         char* ID = cbList_GetElement(Tokens, 1);
         if(cbParse_IsID(ID, strlen(ID)))
         {
-            Node = cbLex_CreateNodeSymbol(cbSymbol_StatementGoto);
-            Node->Middle = cbLex_CreateNodeS(ID);
+            Node = cbLex_CreateNodeSymbol(cbSymbol_StatementGoto, LineCount);
+            Node->Middle = cbLex_CreateNodeS(ID, LineCount);
         }
         else
             cbParse_RaiseError(ErrorList, cbError_InvalidID, LineCount);
@@ -317,8 +317,8 @@ cbLexNode* cbParse_IsStatementLabel(cbList* Tokens, size_t LineCount, cbList* Er
         char* ID = cbList_GetElement(Tokens, 1);
         if(cbParse_IsID(ID, strlen(ID)))
         {
-            Node = cbLex_CreateNodeSymbol(cbSymbol_StatementLabel);
-            Node->Middle = cbLex_CreateNodeS(ID);
+            Node = cbLex_CreateNodeSymbol(cbSymbol_StatementLabel, LineCount);
+            Node->Middle = cbLex_CreateNodeS(ID, LineCount);
         }
         else
             cbParse_RaiseError(ErrorList, cbError_InvalidID, LineCount);
@@ -355,7 +355,7 @@ cbLexNode* cbParse_IsExpression(cbList* Tokens, size_t LineCount, cbList* ErrorL
         if(cbParse_IsID(ID, strlen(ID)) && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
         {
             // Function call tree element
-            Node = cbLex_CreateNodeO(cbOps_Func);
+            Node = cbLex_CreateNodeO(cbOps_Func, LineCount);
             
             // Make sure that the subset is an expression list
             cbList ExpressionList;
@@ -383,7 +383,7 @@ cbLexNode* cbParse_IsExpressionList(cbList* Tokens, size_t LineCount, cbList* Er
     
     // If empty, that is fine, but we don't save the symbol
     if(cbList_GetCount(Tokens) <= 0)
-        Node = cbLex_CreateNode(cbSymbol_None); // Empty
+        Node = cbLex_CreateNode(cbSymbol_None, LineCount); // Empty
     // Else, attempt to apply the production rule
     else
     {
@@ -438,26 +438,26 @@ cbLexNode* cbParse_IsFactor(cbList* Tokens, size_t LineCount, cbList* ErrorList)
         
         // Boolean (first since it could be seen as a variable)
         if(cbLang_IsBoolean(Token, TokenLength))
-            Node = cbLex_CreateNodeB((Token[0] == 't') ? true : false);
+            Node = cbLex_CreateNodeB((Token[0] == 't') ? true : false, LineCount);
         // Variable
         else if(cbParse_IsID(Token, TokenLength))
-            Node = cbLex_CreateNodeV(Token);
+            Node = cbLex_CreateNodeV(Token, LineCount);
         // String
         else if(cbLang_IsString(Token, TokenLength))
-            Node = cbLex_CreateNodeS(Token);
+            Node = cbLex_CreateNodeS(Token, LineCount);
         // Float
         else if(cbLang_IsFloat(Token, TokenLength))
         {
             float Val;
             sscanf(Token, "%f", &Val);
-            Node = cbLex_CreateNodeF(Val);
+            Node = cbLex_CreateNodeF(Val, LineCount);
         }
         // Integer
         else if(cbLang_IsInteger(Token, TokenLength))
         {
             int Val;
             sscanf(Token, "%d", &Val);
-            Node = cbLex_CreateNodeI(Val);
+            Node = cbLex_CreateNodeI(Val, LineCount);
         }
         // Else, unknown
         else
@@ -571,7 +571,7 @@ cbLexNode* cbParse_IsKeywordProduction(cbList* Tokens, size_t LineCount, cbList*
     {
         char* Token = cbList_PeekFront(Tokens);
         if(strcmp(Token, Keyword) == 0)
-            return cbLex_CreateNodeSymbol(Symbol);
+            return cbLex_CreateNodeSymbol(Symbol, LineCount);
     }
     
     // Failed
@@ -593,7 +593,7 @@ cbLexNode* cbParse_IsKeywordBoolProduction(cbList* Tokens, size_t LineCount, cbL
         if(strcmp(IfToken, Keyword) == 0 && strcmp(FirstParenth, "(") == 0 && strcmp(LastParenth, ")") == 0)
         {
             // Valid keyword, save the boolean expression within self
-            Node = cbLex_CreateNodeSymbol(Symbol);
+            Node = cbLex_CreateNodeSymbol(Symbol, LineCount);
             
             // Pase the boolean expression within the parenth
             cbList BoolSubset;
@@ -653,7 +653,7 @@ cbLexNode* cbParse_IsBinaryProduction(cbList* Tokens, size_t LineCount, cbList* 
                     bool ValidOp = cbUtil_OpFromStr(DelimList[j], &Op);
                     if(LeftProduct != NULL && RightProduct != NULL && ValidOp)
                     {
-                        Node = cbLex_CreateNodeO(Op);
+                        Node = cbLex_CreateNodeO(Op, LineCount);
                         Node->Left = LeftProduct;
                         Node->Right = RightProduct;
                     }
@@ -690,64 +690,65 @@ void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
     cbList_PushBack(ErrorList, NewError);
 }
 
-cbLexNode* cbLex_CreateNode(cbLexNodeType Type)
+cbLexNode* cbLex_CreateNode(cbLexNodeType Type, size_t LineNumber)
 {
     cbLexNode* Node = malloc(sizeof(cbLexNode));
     Node->Type = Type;
     Node->Left = Node->Middle = Node->Right = NULL;
+    Node->LineNumber = LineNumber;
     return Node;
 }
 
-cbLexNode* cbLex_CreateNodeSymbol(cbSymbol Symbol)
+cbLexNode* cbLex_CreateNodeSymbol(cbSymbol Symbol, size_t LineNumber)
 {
-    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Symbol);
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Symbol, LineNumber);
     Node->Data.Symbol = Symbol;
     return Node;
 }
 
-cbLexNode* cbLex_CreateNodeI(int Integer)
+cbLexNode* cbLex_CreateNodeI(int Integer, size_t LineNumber)
 {
-    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal, LineNumber);
     Node->Data.Terminal.Type = cbLexIDType_Int;
     Node->Data.Terminal.Data.Integer = Integer;
     return Node;
 }
 
-cbLexNode* cbLex_CreateNodeF(float Float)
+cbLexNode* cbLex_CreateNodeF(float Float, size_t LineNumber)
 {
-    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal, LineNumber);
     Node->Data.Terminal.Type = cbLexIDType_Float;
     Node->Data.Terminal.Data.Float = Float;
     return Node;
 }
 
-cbLexNode* cbLex_CreateNodeB(bool Boolean)
+cbLexNode* cbLex_CreateNodeB(bool Boolean, size_t LineNumber)
 {
-    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal, LineNumber);
     Node->Data.Terminal.Type = cbLexIDType_Bool;
     Node->Data.Terminal.Data.Boolean = Boolean;
     return Node;
 }
 
-cbLexNode* cbLex_CreateNodeS(const char* StringLiteral)
+cbLexNode* cbLex_CreateNodeS(const char* StringLiteral, size_t LineNumber)
 {
-    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal, LineNumber);
     Node->Data.Terminal.Type = cbLexIDType_StringLit;
     Node->Data.Terminal.Data.String = cbUtil_stralloc(StringLiteral);
     return Node;
 }
 
-cbLexNode* cbLex_CreateNodeV(const char* VariableName)
+cbLexNode* cbLex_CreateNodeV(const char* VariableName, size_t LineNumber)
 {
-    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal, LineNumber);
     Node->Data.Terminal.Type = cbLexIDType_Variable;
     Node->Data.Terminal.Data.String = cbUtil_stralloc(VariableName);
     return Node;
 }
 
-cbLexNode* cbLex_CreateNodeO(cbOps Op)
+cbLexNode* cbLex_CreateNodeO(cbOps Op, size_t LineNumber)
 {
-    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal);
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal, LineNumber);
     Node->Data.Terminal.Type = cbLexIDType_Op;
     Node->Data.Terminal.Data.Op = Op;
     return Node;

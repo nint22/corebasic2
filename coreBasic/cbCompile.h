@@ -18,14 +18,26 @@
 
 #include "cbUtil.h"
 #include "cbTypes.h"
+#include "cbParse.h"
 
 /*** Main Compiler Entry Points ***/
 
 // Compile the given symbol table's lex tree into byte-code
 bool cbParse_CompileProgram(cbSymbolsTable* SymbolsTable, cbList* ErrorList, cbVirtualMachine* Process);
 
+/*** Internal Compilaton and Helper Functions ***/
+
 // Build code by traversing the lex-tree left-right then inside (ops)
 void cbParse_BuildNode(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList);
+
+// Load a given instruction into the instructions list
+void cbParse_LoadInstruction(cbSymbolsTable* SymbolsTable, cbOps Op, cbList* ErrorList, int Arg);
+
+// Load a literal into the static memory segment and push a new loaddata call
+void cbParse_LoadLiteral(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList);
+
+// Builds instructions to load the variable at run-time onto the function stack
+void cbParse_LoadVariable(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList);
 
 // End if inclusion guard
 #endif

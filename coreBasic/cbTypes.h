@@ -328,9 +328,6 @@ typedef struct __cbLexID
         char* String;
         cbOps Op;
     } Data;
-    
-    // Line this token was read from
-    size_t LineNumber;
 } cbLexID;
 
 // Define
@@ -351,6 +348,9 @@ typedef struct __cbLexNode
     struct __cbLexNode* Middle; // Only used with ops
     struct __cbLexNode* Right;
     
+    // Line number this lex item was taken from
+    size_t LineNumber;
+    
 } cbLexNode;
 
 // Internal symbols table for parsing, lex-tree building, etc.
@@ -361,6 +361,15 @@ typedef struct __cbSymbolsTable
     
     // A root node for each line of code
     cbList LexTree;
+    
+    // Pseudo op-codes used during the compiling process
+    // Though the ops are correct, many of the arguments
+    // are not yet mapped to memory
+    cbList InstructionsList;    // List of all instructions (cbInstruction)
+    cbList DataList;            // List of all literals (cbVariable)
+    cbList VariablesList;       // List of variable offsets (c-style strings)
+    cbList JumpTable;           // Table of jump instructions
+    cbList LabelTable;          // Table of jump destinations
     
 } cbSymbolsTable;
 

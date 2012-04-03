@@ -121,18 +121,18 @@ void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
 /*** Lexical Tree Functions ***/
 
 // Allocate a node with with all pointers to NULL, and the node is either a symbol or terminal
-cbLexNode* cbLex_CreateNode(cbLexNodeType Type);
+cbLexNode* cbLex_CreateNode(cbLexNodeType Type, size_t LineNumber);
 
 // Allocate a symbol node with the given symbol type
-cbLexNode* cbLex_CreateNodeSymbol(cbSymbol Symbol);
+cbLexNode* cbLex_CreateNodeSymbol(cbSymbol Symbol, size_t LineNumber);
 
 // Allocate a terminal with either a literal (int, float, bool, string), variable, or operator
-cbLexNode* cbLex_CreateNodeI(int Integer);
-cbLexNode* cbLex_CreateNodeF(float Float);
-cbLexNode* cbLex_CreateNodeB(bool Boolean);
-cbLexNode* cbLex_CreateNodeS(const char* StringLiteral);
-cbLexNode* cbLex_CreateNodeV(const char* VariableName);
-cbLexNode* cbLex_CreateNodeO(cbOps Op);
+cbLexNode* cbLex_CreateNodeI(int Integer, size_t LineNumber);
+cbLexNode* cbLex_CreateNodeF(float Float, size_t LineNumber);
+cbLexNode* cbLex_CreateNodeB(bool Boolean, size_t LineNumber);
+cbLexNode* cbLex_CreateNodeS(const char* StringLiteral, size_t LineNumber);
+cbLexNode* cbLex_CreateNodeV(const char* VariableName, size_t LineNumber);
+cbLexNode* cbLex_CreateNodeO(cbOps Op, size_t LineNumber);
 
 // Remove the given node (and all children nodes) as well as release all data
 // Note that if the data contains a string, that too is released from the heap
