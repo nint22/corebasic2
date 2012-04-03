@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		060F30041523A9690064F7D4 /* example10.cb in CopyFiles */ = {isa = PBXBuildFile; fileRef = 060F30021523A9590064F7D4 /* example10.cb */; };
 		06136906151FEF0F0094CCF7 /* cbParse.c in Sources */ = {isa = PBXBuildFile; fileRef = 06136905151FEF0F0094CCF7 /* cbParse.c */; };
+		06245C0B15294B1C0076E46D /* cbCompile.c in Sources */ = {isa = PBXBuildFile; fileRef = 06245C0A15294B1C0076E46D /* cbCompile.c */; };
 		068B2767151C05BC006F153F /* cbUtil.c in Sources */ = {isa = PBXBuildFile; fileRef = 068B2766151C05BC006F153F /* cbUtil.c */; };
 		4879353A14D49975006A3CAD /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 4879353914D49975006A3CAD /* main.c */; };
 		4879355414D499CF006A3CAD /* cbLang.c in Sources */ = {isa = PBXBuildFile; fileRef = 4879354E14D499CF006A3CAD /* cbLang.c */; };
@@ -51,6 +52,8 @@
 		060F30021523A9590064F7D4 /* example10.cb */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = example10.cb; path = coreBasic/example10.cb; sourceTree = "<group>"; };
 		06136903151FEF090094CCF7 /* cbParse.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cbParse.h; sourceTree = "<group>"; };
 		06136905151FEF0F0094CCF7 /* cbParse.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cbParse.c; sourceTree = "<group>"; };
+		06245C0815294B120076E46D /* cbCompile.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = cbCompile.h; sourceTree = "<group>"; };
+		06245C0A15294B1C0076E46D /* cbCompile.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cbCompile.c; sourceTree = "<group>"; };
 		068B2766151C05BC006F153F /* cbUtil.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; lineEnding = 0; path = cbUtil.c; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		068B2769151C05C4006F153F /* cbUtil.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cbUtil.h; sourceTree = "<group>"; };
 		068B276A151C090F006F153F /* cbTypes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cbTypes.h; sourceTree = "<group>"; };
@@ -101,10 +104,12 @@
 			children = (
 				4879354E14D499CF006A3CAD /* cbLang.c */,
 				4879354F14D499CF006A3CAD /* cbLang.h */,
-				06136905151FEF0F0094CCF7 /* cbParse.c */,
-				06136903151FEF090094CCF7 /* cbParse.h */,
 				4879355214D499CF006A3CAD /* cbProcess.c */,
 				4879355314D499CF006A3CAD /* cbProcess.h */,
+				06136905151FEF0F0094CCF7 /* cbParse.c */,
+				06136903151FEF090094CCF7 /* cbParse.h */,
+				06245C0A15294B1C0076E46D /* cbCompile.c */,
+				06245C0815294B120076E46D /* cbCompile.h */,
 			);
 			name = Lang;
 			sourceTree = "<group>";
@@ -210,6 +215,7 @@
 				4879355614D499CF006A3CAD /* cbProcess.c in Sources */,
 				068B2767151C05BC006F153F /* cbUtil.c in Sources */,
 				06136906151FEF0F0094CCF7 /* cbParse.c in Sources */,
+				06245C0B15294B1C0076E46D /* cbCompile.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

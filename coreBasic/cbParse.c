@@ -436,16 +436,16 @@ cbLexNode* cbParse_IsFactor(cbList* Tokens, size_t LineCount, cbList* ErrorList)
         char* Token = cbList_PeekFront(Tokens);
         size_t TokenLength = strlen(Token);
         
+        // Boolean (first since it could be seen as a variable)
+        if(cbLang_IsBoolean(Token, TokenLength))
+            Node = cbLex_CreateNodeB((Token[0] == 't') ? true : false);
         // Variable
-        if(cbParse_IsID(Token, TokenLength))
+        else if(cbParse_IsID(Token, TokenLength))
             Node = cbLex_CreateNodeV(Token);
         // String
         else if(cbLang_IsString(Token, TokenLength))
             Node = cbLex_CreateNodeS(Token);
-        // Boolean
-        else if(cbLang_IsBoolean(Token, TokenLength))
-            Node = cbLex_CreateNodeB((Token[0] == 't') ? true : false);
-        // Float 
+        // Float
         else if(cbLang_IsFloat(Token, TokenLength))
         {
             float Val;

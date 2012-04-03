@@ -29,10 +29,18 @@ bool cbInit_LoadSourceCode(cbVirtualMachine* Processor, unsigned long MemorySize
     // Null out the processor
     memset((void*)Processor, 0, sizeof(cbVirtualMachine));
     
-    // Parse the code
-    cbParse_ParseProgram(Code, ErrorList);
+    // Parse code into a lex tree (stores in symbols table)
+    cbSymbolsTable SymbolsTable;
+    cbParse_ParseProgram(Code, ErrorList, &SymbolsTable);
     
     // If there are any errors, dont bother with the processor init
+    if(cbList_GetCount(ErrorList) > 0)
+        return false;
+    
+    // Compile code
+    cbParse_CompileProgram(&SymbolsTable, ErrorList, Processor);
+    
+    // If any errors, report it now
     if(cbList_GetCount(ErrorList) > 0)
         return false;
     

@@ -19,6 +19,7 @@
 #include "cbUtil.h"
 #include "cbTypes.h"
 #include "cbParse.h"
+#include "cbCompile.h"
 
 /*** Init / Release Functions ***/
 
