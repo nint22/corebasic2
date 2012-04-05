@@ -125,7 +125,7 @@ typedef enum __cbOps
     cbOps_Goto,
     cbOps_Exec,
     cbOps_Return,
-    cbOps_Stop,
+    cbOps_Halt,
     
     // Program I/O
     cbOps_Input,
@@ -184,7 +184,7 @@ static const char cbOpsNames[cbOpsCount][16] =
     "goto",
     "exec",
     "return",
-    "stop",
+    "halt",
     "input",
     "disp",
     "output",
@@ -357,7 +357,7 @@ typedef struct __cbLexNode
 typedef struct __cbSymbolsTable
 {
     // Number of block stacks (loops and conditionals)
-    size_t BlockStack;
+    size_t BlockDepth;
     
     // A root node for each line of code
     cbList LexTree;
@@ -368,10 +368,31 @@ typedef struct __cbSymbolsTable
     cbList InstructionsList;    // List of all instructions (cbInstruction)
     cbList DataList;            // List of all literals (cbVariable)
     cbList VariablesList;       // List of variable offsets (c-style strings)
-    cbList JumpTable;           // Table of jump instructions
+    cbList JumpTable;           // Table of jump instructions (mixed array of 0: jump operator (ref, not new), then 1: label-name (new obj, and new internal string))
     cbList LabelTable;          // Table of jump destinations
+    cbList BlockStack;          // Active stack of blocks during program compilation (references are not unique, should never delete)
     
 } cbSymbolsTable;
+
+/*** Compiler Structs ***/
+
+// A helper data structure to track all labels and their addresses,
+// used in the jump table at the end of block processing
+typedef struct __cbLabel
+{
+    size_t Index;
+    char* LabelName;
+} cbLabel;
+
+// A helper data structure to track all traget jump locations
+// This is commonly used when needing to maintain control-loop
+// header locations
+typedef struct __cbJumpTarget
+{
+    cbSymbol Symbol;            // The symbol this block is associated with (while, for, if, etc..)
+    size_t Index;               // Target address index (from the front of the instructions list)
+    cbInstruction* Instruction; // The jump instruction
+} cbJumpTarget;
 
 /*** Error Reporting ***/
 

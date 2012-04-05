@@ -20,19 +20,6 @@
          shouldBeEnabled = "Yes"
          ignoreCount = "0"
          continueAfterRunningActions = "No"
-         filePath = "coreBasic/main.c"
-         timestampString = "354658041.79483"
-         startingColumnNumber = "9223372036854775807"
-         endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "165"
-         endingLineNumber = "165"
-         landmarkName = "main()"
-         landmarkType = "7">
-      </FileBreakpoint>
-      <FileBreakpoint
-         shouldBeEnabled = "Yes"
-         ignoreCount = "0"
-         continueAfterRunningActions = "No"
          filePath = "coreBasic/cbParse.c"
          timestampString = "355026249.128052"
          startingColumnNumber = "9223372036854775807"
@@ -60,12 +47,12 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "coreBasic/cbCompile.c"
-         timestampString = "355109210.568581"
+         timestampString = "355287425.792219"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "27"
-         endingLineNumber = "27"
-         landmarkName = "cbParse_CompileProgram()"
+         startingLineNumber = "284"
+         endingLineNumber = "284"
+         landmarkName = "cbParse_BuildNode()"
          landmarkType = "7">
       </FileBreakpoint>
       <FileBreakpoint
@@ -73,11 +60,24 @@
          ignoreCount = "0"
          continueAfterRunningActions = "No"
          filePath = "coreBasic/cbCompile.c"
-         timestampString = "355115735.947106"
+         timestampString = "355287425.792219"
          startingColumnNumber = "9223372036854775807"
          endingColumnNumber = "9223372036854775807"
-         startingLineNumber = "52"
-         endingLineNumber = "52"
+         startingLineNumber = "288"
+         endingLineNumber = "288"
+         landmarkName = "cbParse_BuildNode()"
+         landmarkType = "7">
+      </FileBreakpoint>
+      <FileBreakpoint
+         shouldBeEnabled = "Yes"
+         ignoreCount = "0"
+         continueAfterRunningActions = "No"
+         filePath = "coreBasic/cbCompile.c"
+         timestampString = "355287425.792219"
+         startingColumnNumber = "9223372036854775807"
+         endingColumnNumber = "9223372036854775807"
+         startingLineNumber = "249"
+         endingLineNumber = "249"
          landmarkName = "cbParse_BuildNode()"
          landmarkType = "7">
       </FileBreakpoint>

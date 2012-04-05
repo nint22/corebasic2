@@ -13,7 +13,7 @@
 bool cbParse_ParseProgram(const char* Program, cbList* ErrorList, cbSymbolsTable* SymbolsTable)
 {
     // Create our symbols table (just for lexical analysis help for now)
-    SymbolsTable->BlockStack = 0;
+    SymbolsTable->BlockDepth = 0;
     cbList_Init(&SymbolsTable->LexTree);
     
     // Keep an active token pointer; this changes over time
@@ -45,7 +45,7 @@ bool cbParse_ParseProgram(const char* Program, cbList* ErrorList, cbSymbolsTable
     }
     
     // If the local stack is not empty, then there is a dangling end-block
-    if(SymbolsTable->BlockStack > 0)
+    if(SymbolsTable->BlockDepth > 0)
         cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
     
     // Done parsing, return the symbols table
@@ -114,22 +114,22 @@ cbLexNode* cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, siz
     // Starts new blocks
     if((Node = cbParse_IsStatementIf(Tokens, LineCount, ErrorList)) || (Node = cbParse_IsStatementWhile(Tokens, LineCount, ErrorList)) || (Node = cbParse_IsStatementFor(Tokens, LineCount, ErrorList)))
     {
-        SymbolsTable->BlockStack++;
+        SymbolsTable->BlockDepth++;
         return Node;
     }
     
     // Must have at least one block active
-    if(SymbolsTable->BlockStack > 0 && (Node = cbParse_IsStatementElif(Tokens, LineCount, ErrorList)))
+    if(SymbolsTable->BlockDepth > 0 && (Node = cbParse_IsStatementElif(Tokens, LineCount, ErrorList)))
         return Node;
-    if(SymbolsTable->BlockStack > 0 && (Node = cbParse_IsStatementElse(Tokens, LineCount, ErrorList)))
+    if(SymbolsTable->BlockDepth > 0 && (Node = cbParse_IsStatementElse(Tokens, LineCount, ErrorList)))
         return Node;
-    if(SymbolsTable->BlockStack > 0 && (Node = cbParse_IsStatementEnd(Tokens, LineCount, ErrorList)))
+    if(SymbolsTable->BlockDepth > 0 && (Node = cbParse_IsStatementEnd(Tokens, LineCount, ErrorList)))
     {
         // Can never close non-existing blocks
-        if(SymbolsTable->BlockStack <= 0)
+        if(SymbolsTable->BlockDepth <= 0)
             cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
         else
-            SymbolsTable->BlockStack--;
+            SymbolsTable->BlockDepth--;
         return Node;
     }
     

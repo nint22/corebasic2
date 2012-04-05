@@ -24,10 +24,30 @@ bool cbInit_LoadSourceCode(cbVirtualMachine* Processor, unsigned long MemorySize
         return false;
     }
     
-    /*** Parse & Compile Code ***/
+    /*** VM Init. ***/
     
-    // Null out the processor
+    // Null out the processor and set default values
     memset((void*)Processor, 0, sizeof(cbVirtualMachine));
+    
+    // Allocate the memory map
+    Processor->InterruptState = cbInterrupt_None;
+    Processor->MemorySize = MemorySize;
+    Processor->Memory = malloc(MemorySize);
+    
+    // Alocate screen
+    Processor->ScreenWidth = ScreenWidth;
+    Processor->ScreenHeight = ScreenHeight;
+    Processor->ScreenBuffer = malloc(ScreenWidth * ScreenHeight);
+    
+    // Save standard I/O buffers immediately
+    Processor->StreamOut = StreamOut;
+    Processor->StreamIn = StreamIn;
+    
+    // Initialize stack pointers to the highest address (stack size set to 0)
+    Processor->StackBasePointer = Processor->MemorySize;
+    Processor->StackPointer = Processor->MemorySize;
+    
+    /*** Parse & Compile Code ***/
     
     // Parse code into a lex tree (stores in symbols table)
     cbSymbolsTable SymbolsTable;
@@ -38,28 +58,7 @@ bool cbInit_LoadSourceCode(cbVirtualMachine* Processor, unsigned long MemorySize
         return false;
     
     // Compile code
-    cbParse_CompileProgram(&SymbolsTable, ErrorList, Processor);
-    
-    // If any errors, report it now
-    if(cbList_GetCount(ErrorList) > 0)
-        return false;
-    
-    /*** Initialize Machine ***/
-    
-    // Save standard i/o buffers immediately
-    Processor->StreamOut = StreamOut;
-    Processor->StreamIn = StreamIn;
-    
-    // Save screen size and allocate buffer
-    Processor->ScreenWidth = ScreenWidth;
-    Processor->ScreenHeight = ScreenHeight;
-    Processor->ScreenBuffer = malloc(ScreenWidth * ScreenHeight);
-    
-    // TODO:
-    // Initiailize correct machine registers
-    
-    // Done without any erorrs
-    return true;
+    return cbParse_CompileProgram(&SymbolsTable, ErrorList, Processor);
 }
 
 cbError cbInit_LoadByteCode(cbVirtualMachine* Processor, unsigned long MemorySize, FILE* InFile, FILE* StreamOut, FILE* StreamIn, size_t ScreenWidth, size_t ScreenHeight)

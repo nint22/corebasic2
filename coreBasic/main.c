@@ -115,10 +115,6 @@ int main (int argc, const char * argv[])
     cbVirtualMachine Simulator;
     cbList Errors;
     
-    // Helper and simulation flags
-    cbError Error = cbError_None;
-    cbInterrupt InterruptState = cbInterrupt_None;
-    
     // Attempt to open the source file (read-binary mode)
     if(SourceFileName != NULL)
     {
@@ -161,6 +157,8 @@ int main (int argc, const char * argv[])
         return -1;
     }
     
+    /*
+     OLD FEATURE:
     // If the user wants to just write out to the file buffer
     if(OutFileName != NULL && SourceFileName != NULL)
     {
@@ -180,14 +178,6 @@ int main (int argc, const char * argv[])
         fclose(OutFile);
     }
     
-    // Check for error
-    if(Error != cbError_None)
-    {
-        printf("> Program failed to compile\n");
-        printf("> Error %d: \"%s\"\n", Error, cbErrorNames[Error]);
-        return -1;
-    }
-    
     // Else, it has to be compiled code
     if(InFileName != NULL)
     {
@@ -205,8 +195,13 @@ int main (int argc, const char * argv[])
         // Close file stream
         fclose(CompiledFile);
     }
+    */
     
     /*** Simulation ***/
+    
+    // Helper and simulation flags
+    cbError Error = cbError_None;
+    cbInterrupt InterruptState = cbInterrupt_None;
     
     // Print out some helpful details if verbose
     if(IsVerbose)

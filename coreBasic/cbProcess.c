@@ -68,7 +68,7 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
         case cbOps_Goto:
             Processor->InstructionPointer += Instruction->Arg - sizeof(cbInstruction);
             break;
-        case cbOps_Stop:
+        case cbOps_Halt:
             Processor->Halted = true;
             break;
         
