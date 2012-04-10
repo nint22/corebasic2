@@ -59,7 +59,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "example10.cb -v"
+            argument = "example3.cb -v"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>

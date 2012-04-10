@@ -150,7 +150,7 @@ int main (int argc, const char * argv[])
         for(size_t i = 0; i < ErrorCount; i++)
         {
             cbParseError* Error = cbList_PopFront(&Errors);
-            printf(">> %lu: %s\n", Error->LineNumber, cbLang_GetErrorMsg(Error->ErrorCode));
+            printf(">> %lu: %s\n", Error->LineNumber, cbDebug_GetErrorMsg(Error->ErrorCode));
             free(Error);
         }
         fflush(stdout); // Xcode isn't printing out before quitting
@@ -199,10 +199,6 @@ int main (int argc, const char * argv[])
     
     /*** Simulation ***/
     
-    // Helper and simulation flags
-    cbError Error = cbError_None;
-    cbInterrupt InterruptState = cbInterrupt_None;
-    
     // Print out some helpful details if verbose
     if(IsVerbose)
     {
@@ -210,47 +206,40 @@ int main (int argc, const char * argv[])
         cbDebug_PrintMemory(&Simulator, stdout);
     }
     
-    // Check for error
-    if(Error != cbError_None)
+    // Helper and simulation flags
+    cbError Error = cbError_None;
+    cbInterrupt InterruptState = cbInterrupt_None;
+    
+    // Simulate until done
+    printf("> Program executing\n");
+    while(Error == cbError_None)
     {
-        printf("> Program failed to compile\n");
-        printf("> Error %d: \"%s\"\n", Error, cbErrorNames[Error]);
-        return -1;
-    }
-    // Else, regular simulation if we didn't write to compiled code
-    else
-    {
-        // Simulate until done
-        printf("> Program executing\n");
-        while(Error == cbError_None)
+        // Step, catching any errors or interruptions
+        Error = cbStep(&Simulator, &InterruptState);
+        
+        // If interrupted for input
+        if(Error == cbError_None && InterruptState != cbInterrupt_None)
         {
-            // Step, catching any errors or interruptions
-            Error = cbStep(&Simulator, &InterruptState);
+            // Get user input string
+            char input[256];
+            do {
+                scanf("%s", input);
+            } while(InterruptState == cbInterrupt_Input && strlen(input) <= 0);
             
-            // If interrupted for input
-            if(Error == cbError_None && InterruptState != cbInterrupt_None)
-            {
-                // Get user input string
-                char input[256];
-                do {
-                    scanf("%s", input);
-                } while(InterruptState == cbInterrupt_Input && strlen(input) <= 0);
-                
-                // Remove the interrupt state, posting the result of the user input
-                cbStep_ReleaseInterrupt(&Simulator, input);
-            }
+            // Remove the interrupt state, posting the result of the user input
+            cbStep_ReleaseInterrupt(&Simulator, input);
         }
-        
-        // Error state:
-        if(Error != cbError_None && Error != cbError_Halted)
-            printf("> Error %d: \"%s\"\n", Error, cbErrorNames[Error]);
-        else
-            printf("> Program terminated normally\n");
-        
-        // Print ticks if verbose
-        if(IsVerbose)
-            printf("> Total ticks: %lu\n", cbDebug_GetTicks(&Simulator));
     }
+    
+    // Error state:
+    if(Error != cbError_None && Error != cbError_Halted)
+        printf("> Error %d, line %lu: \"%s\"\n", Error, cbDebug_GetLine(&Simulator), cbDebug_GetErrorMsg(Error));
+    else
+        printf("> Program terminated normally\n");
+    
+    // Print ticks if verbose
+    if(IsVerbose)
+        printf("> Total ticks: %lu\n", cbDebug_GetTicks(&Simulator));
     
     // Release
     cbRelease(&Simulator);

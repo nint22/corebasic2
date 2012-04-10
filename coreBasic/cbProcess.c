@@ -16,7 +16,7 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
     if(Processor == NULL)
         return cbError_Null;
     
-    // If proc. is halted, return halt state
+    // If proc. is halted, return halt state (not an error, just finalized)
     if(Processor->Halted)
         return cbError_Halted;
     
@@ -24,10 +24,12 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
     if(Processor->InterruptState != cbInterrupt_None)
         return cbError_None;
     
-    // Error state
-    cbError Error = cbError_None;
+    // Instruction pointer bounds check
+    if(Processor->InstructionPointer > Processor->MemorySize - sizeof(cbInstruction))
+        return cbError_Overflow;
     
-    // Get the instruction
+    // Error state defaults to none and load the instruction
+    cbError Error = cbError_None;
     cbInstruction* Instruction = (cbInstruction*)((char*)Processor->Memory + Processor->InstructionPointer);
     
     // Execute the instruction
@@ -66,6 +68,7 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
         
         // Program control ops.
         case cbOps_Goto:
+            // When jumping, make sure to jump one less since we grow the instruction ptr. next loop
             Processor->InstructionPointer += Instruction->Arg - sizeof(cbInstruction);
             break;
         case cbOps_Halt:
@@ -79,19 +82,38 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
         case cbOps_LoadData:
             // Stack grows, and copy over variable from data segment
             Processor->StackPointer -= sizeof(cbVariable);
-            memcpy((char*)Processor->Memory + Processor->StackPointer, (char*)Processor->Memory + Processor->DataPointer + Instruction->Arg, sizeof(cbVariable));
+            if(Processor->StackPointer < Processor->HeapPointer)
+                Error = cbError_Overflow;
+            else
+                memcpy((char*)Processor->Memory + Processor->StackPointer, (char*)Processor->Memory + Processor->DataPointer + Instruction->Arg, sizeof(cbVariable));
             break;
         case cbOps_LoadVar:
             // Stack grows, and set variable to be a reference to the var from the base stack address
             Processor->StackPointer -= sizeof(cbVariable);
-            ((cbVariable*)((char*)Processor->Memory + Processor->StackPointer))->Type = cbVariableType_Offset;
-            ((cbVariable*)((char*)Processor->Memory + Processor->StackPointer))->Data.Offset = Instruction->Arg;
+            if(Processor->StackPointer < Processor->HeapPointer)
+                Error = cbError_Overflow;
+            else
+            {
+                ((cbVariable*)((char*)Processor->Memory + Processor->StackPointer))->Type = cbVariableType_Offset;
+                ((cbVariable*)((char*)Processor->Memory + Processor->StackPointer))->Data.Offset = Instruction->Arg;
+            }
             break;
         case cbOps_AddStack:
+            // Grow stack up (positive) or down (negative)
             Processor->StackPointer += Instruction->Arg;
+            
+            // Bounds check (can't grow up if no space, can't grow down if full)
+            if(Processor->StackPointer >= Processor->MemorySize && Instruction->Arg > 0)
+                Error = cbError_Overflow;
+            else if(Processor->StackPointer < Processor->HeapPointer && Instruction->Arg < 0)
+                Error = cbError_Overflow;
+            
+            // Zero-out the segment being grown
+            else if(Instruction->Arg < 0)
+                memset(((char*)Processor->Memory + Processor->StackPointer), 0, -(Instruction->Arg));
             break;
         
-        // Input control
+        // Input control (i.e. interrupts)
         case cbOps_Pause:
             Processor->InterruptState = cbInterrupt_Pause;
             break;
@@ -101,7 +123,7 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
         case cbOps_GetKey:
             Processor->InterruptState = cbInterrupt_GetKey;
             break;
-            
+        
         // Output control
         case cbOps_Disp:
             Error = cbStep_Disp(Processor, Instruction);
@@ -112,45 +134,30 @@ cbError cbStep(cbVirtualMachine* Processor, cbInterrupt* InterruptState)
         case cbOps_Clear:
             Error = cbStep_Clear(Processor, Instruction);
             break;
-            
+        
         // TODO
         case cbOps_Exec:
             break;
         case cbOps_Return:
-            break;
-            
-        // Keywords that are not to become operators
-        case cbOps_Else:
-        case cbOps_End:
-        case cbOps_Label:
-        case cbOps_Func:
-        case cbOps_Elif:
-        case cbOps_While:
-        case cbOps_For:
-            printf("Warning: non-op detected!\n");
             break;
         
         // Nop: Does nothing except stalls a cycle and saves the current line number
         case cbOps_Nop:
             Processor->LineIndex = Instruction->Arg;
             break;
+        
+        // Keywords that are not to become operators
+        default:
+            Error = cbError_UnknownOp;
+            break;
     }
     
-    // If proc. was halted, just return, else tick
-    if(Processor->Halted)
-        return cbError_Halted;
-    else
-        Processor->Ticks++;
-    
-    // Grow instruction counter
+    // Grow tick count and instruction pointer
+    Processor->Ticks++;
     Processor->InstructionPointer += sizeof(cbInstruction);
     
     // Post interrupt (if any)
     *InterruptState = Processor->InterruptState;
-    
-    // Out of bounds instruction index check
-    if(Processor->InstructionPointer >= Processor->DataPointer || Processor->StackPointer > Processor->StackBasePointer || Processor->StackPointer <= Processor->HeapPointer)
-        Error = cbError_Overflow;
     
     // All done!
     return Error;
@@ -353,15 +360,21 @@ cbError cbStep_If(cbVirtualMachine* Processor, cbInstruction* Instruction)
     cbVariable* A = (cbVariable*)((char*)Processor->Memory + Processor->StackPointer);
     Processor->StackPointer += sizeof(cbVariable);
     
-    // Is this variable false?
-    if(A->Type != cbVariableType_Int)
+    // Dereference if needed
+    if(A->Type == cbVariableType_Offset)
+        A = (cbVariable*)((char*)Processor->Memory + Processor->StackBasePointer + A->Data.Offset);
+    
+    // Int, float, and bool are accepted
+    if(A->Type != cbVariableType_Int && A->Type != cbVariableType_Float && A->Type != cbVariableType_Bool)
         return cbError_TypeMismatch;
     
     // Jump outside of conditional block to the instruction above target (at bottom of VM loop, we grow instruction)
-    else if(A->Data.Int == 0)
-        Processor->InstructionPointer += Instruction->Arg - sizeof(cbInstruction);
+    else if((A->Type == cbVariableType_Int && A->Data.Int == 0) ||
+            (A->Type == cbVariableType_Float && A->Data.Float == 0) ||
+            (A->Type == cbVariableType_Bool && A->Data.Bool == 0))
+        Processor->InstructionPointer += (Instruction->Arg - 1) * sizeof(cbInstruction);
     
-    // Else: Continiue execution
+    // Else: Continiue execution sans jump
     
     // No problem
     return cbError_None;

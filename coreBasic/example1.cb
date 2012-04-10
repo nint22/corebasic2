@@ -2,7 +2,7 @@ disp(3 + 4 * 2 / ( 1 - 5 ))
 disp("\n")
 disp(142*123*412*12)
 disp("\n")
-disp(15 / 3 * 4)
+disp(15 / 3 * 4) // Note: It is correctly (15 / )3 * 4
 disp("\n")
 disp(15 / (3 * 4))
 disp("\n")

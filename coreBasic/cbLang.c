@@ -20,7 +20,7 @@ bool cbInit_LoadSourceCode(cbVirtualMachine* Processor, unsigned long MemorySize
     // Ignore if any arg is null
     if(Processor == NULL || Code == NULL || StreamOut == NULL || StreamIn == NULL)
     {
-        cbParse_RaiseError(ErrorList, cbError_Null, -1);
+        cbUtil_RaiseError(ErrorList, cbError_Null, -1);
         return false;
     }
     
@@ -329,4 +329,9 @@ size_t cbDebug_GetLine(cbVirtualMachine* Processor)
 const char* const cbDebug_GetOpName(cbOps Op)
 {
     return cbOpsNames[Op];
+}
+
+const char* const cbDebug_GetErrorMsg(cbError ErrorCode)
+{
+    return cbErrorNames[ErrorCode];
 }

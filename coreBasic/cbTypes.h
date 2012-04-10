@@ -156,11 +156,14 @@ typedef enum __cbOps
     cbOps_And,
     cbOps_Or,
     
-    // Hidden internal ops
+    // Memory loading and saving
     cbOps_LoadData,  // Push a literal from the data section (arg is the offset from the data base)
     cbOps_LoadVar,   // Push the variable's offset from the stack base into the stack (arg is the offset from stack base)
     cbOps_AddStack,  // Add the number of bytes (positive or negative) to the stack pointer by arg bytes
-    cbOps_Nop,       // No-Operator; commonly used to store meta information (i.e. debugging symbols) in the arg int
+    
+    // No-Operator; commonly used to store meta information (i.e. debugging symbols) in the arg int
+    // For now it stores the line number of the next instructions to be executed
+    cbOps_Nop,
 } cbOps;
 
 // Instructions are a combination of an op and a data offset (if needed)
@@ -312,6 +315,7 @@ typedef enum __cbLexIDType
     cbLexIDType_StringLit,
     cbLexIDType_Variable,   // Still uses the same string buffer
     cbLexIDType_Op,
+    cbLexIDType_Func,
 } cbLexIDType;
 
 
@@ -325,7 +329,7 @@ typedef struct __cbLexID
         int Integer;
         float Float;
         bool Boolean;
-        char* String;
+        char* String;   // Variable, literals, and function names
         cbOps Op;
     } Data;
 } cbLexID;
@@ -365,11 +369,11 @@ typedef struct __cbSymbolsTable
     // Pseudo op-codes used during the compiling process
     // Though the ops are correct, many of the arguments
     // are not yet mapped to memory
-    cbList InstructionsList;    // List of all instructions (cbInstruction)
-    cbList DataList;            // List of all literals (cbVariable)
-    cbList VariablesList;       // List of variable offsets (c-style strings)
-    cbList JumpTable;           // Table of jump instructions (mixed array of 0: jump operator (ref, not new), then 1: label-name (new obj, and new internal string))
-    cbList LabelTable;          // Table of jump destinations
+    cbList InstructionsList;    // List of all instructions (cbInstruction, heap-allocated)
+    cbList DataList;            // List of all literals (cbVariable, heap-allocated)
+    cbList VariablesList;       // List of variable offsets (c-style strings, heap-allocated)
+    cbList JumpTable;           // Table of jump instructions (cbJump objects, heap-allocated)
+    cbList LabelTable;          // Table of jump destinations (cbLabel objects, heap-allocated)
     cbList BlockStack;          // Active stack of blocks during program compilation (references are not unique, should never delete)
     
 } cbSymbolsTable;
@@ -383,6 +387,15 @@ typedef struct __cbLabel
     size_t Index;
     char* LabelName;
 } cbLabel;
+
+// A helper data structure to track all jumping instructions, their
+// target label names, and the line number they are coming from (to help raise errors)
+typedef struct __cbJump
+{
+    cbInstruction* Instr;
+    char* LabelName;
+    size_t LineNumber;
+} cbJump;
 
 // A helper data structure to track all traget jump locations
 // This is commonly used when needing to maintain control-loop
@@ -399,7 +412,7 @@ typedef struct __cbJumpTarget
 // Failure reasons
 // Note that these are both parsing, compiling,
 // and run-time error definitions
-static const int cbErrorCount = 18;
+static const int cbErrorCount = 15;
 typedef enum __cbError
 {
     cbError_None,
@@ -414,9 +427,6 @@ typedef enum __cbError
     cbError_Halted,
     cbError_Assignment,
     cbError_BlockMismatch,
-    cbError_ParseInt,
-    cbError_ParseFloat,
-    cbError_MissingArgs,
     cbError_MissingLabel,
     cbError_InvalidID,
     cbError_ConstSet,
@@ -437,9 +447,6 @@ static const char cbErrorNames[cbErrorCount][64] =
     "Process halted",
     "Cannot assign expression",
     "Block mismatch",
-    "Failed to parse integer",
-    "Failed to parse float",
-    "Missing arguments",
     "Missing label",
     "Invalid variable name",
     "Assigning a constant",

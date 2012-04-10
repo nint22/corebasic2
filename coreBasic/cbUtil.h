@@ -48,21 +48,10 @@
 // Posts the major and minor version
 __cbEXPORT void cbGetVersion(unsigned int* Major, unsigned int* Minor);
 
-/*** Operator Helpers ***/
-
-// The higher the number, the more important it is (i.e. the higher priority it has)
-int cbLang_OpPrecedence(const char* String, size_t StringLength);
-
-// Returns true if left-to-right associative
-bool cbLang_OpLeftAssoc(const char* String, size_t StringLength);
-
 /*** Validation Functions ***/
 
 // Returns true if the given string of given length is a number
 bool cbLang_IsInteger(const char* String, size_t StringLength);
-
-// Returns true if the given string of given length is a function (i.e. "disp")
-bool cbLang_IsFunction(const char* String, size_t StringLength);
 
 // Returns true if the given string of given length is an operand (i.e. "and")
 bool cbLang_IsOp(const char* String, size_t StringLength);
@@ -76,16 +65,10 @@ bool cbLang_IsString(const char* String, size_t StringLength);
 // Returns true if the given string is a boolean
 bool cbLang_IsBoolean(const char* String, size_t StringLength);
 
-// Returns true if the given string is a variable
-bool cbLang_IsVariable(const char* String, size_t StringLength);
-
 // Returns true if the given string is a reserved key-word
 bool cbLang_IsReserved(const char* String, size_t StringLength);
 
 /*** cbList Comparison Functions ***/
-
-// Given two objects (integers), return true if they are the same
-bool cbList_CompareInt(void* A, void* B);
 
 // Given two pointers to strings, return true if they length-wise match (case sensitive)
 bool cbList_CompareString(void* A, void* B);
@@ -93,12 +76,14 @@ bool cbList_CompareString(void* A, void* B);
 // Given two pointers, return true if they point to the same address
 bool cbList_ComparePointer(void* A, void* B);
 
-/*** Error Helpers ***/
-
-// Returns the english-language error string associated with the given error code
-__cbEXPORT const char* const cbLang_GetErrorMsg(cbError ErrorCode);
+// Given two pointers, the first being of a cbLabel* and the second being a c-string (char*), return
+// true if they match through strcmp (case sensitive)
+bool cbList_CompareLabelName(void* A, void *B);
 
 /*** Macro-like Functions ***/
+
+// Error reporting associated with code compiling
+inline void cbUtil_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber);
 
 // Allocate, on the heap, a string that contains the given string buffer
 // As with any object on the heap, it is up to the user to release it

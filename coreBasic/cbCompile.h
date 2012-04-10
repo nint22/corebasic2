@@ -46,5 +46,8 @@ void cbParse_LoadGoto(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* Err
 // Define a label that can be jumped to; duplicates raise errors
 void cbParse_LoadLabel(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList);
 
+// Load the appropriate function code as needed; converts to system calls as needed
+void cbParse_LoadFunction(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList);
+
 // End if inclusion guard
 #endif

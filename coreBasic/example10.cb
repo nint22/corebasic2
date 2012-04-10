@@ -1,6 +1,8 @@
 // Used to test special cases and syntax-errors
 a = 0 + 1 - (4)
 b = c
-if(false)
-a = "hello"// derp
+if(true)
+    // Another empty-line comment
+    a = "hello\n"// derp
+    disp(a)
 end

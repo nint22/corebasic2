@@ -39,7 +39,7 @@ bool cbParse_CompileProgram(cbSymbolsTable* SymbolsTable, cbList* ErrorList, cbV
     
     // Fail if the block stack isn't empty
     if(cbList_GetCount(&SymbolsTable->BlockStack) > 0)
-        cbParse_RaiseError(ErrorList, cbError_BlockMismatch, 0);
+        cbUtil_RaiseError(ErrorList, cbError_BlockMismatch, 0);
     
     /*** Place ByteCode into Memory ***/
     
@@ -137,9 +137,37 @@ bool cbParse_CompileProgram(cbSymbolsTable* SymbolsTable, cbList* ErrorList, cbV
         
         // Save the heap-starting address
         Process->HeapPointer = ByteOffset;
+        
+        // 7. Match all goto's with labels
+        while(cbList_GetCount(&SymbolsTable->JumpTable) > 0)
+        {
+            // Pop off the instruction we need to update and the label's name
+            cbJump* Jump = cbList_PopFront(&SymbolsTable->JumpTable);
+            
+            // Find the label in the labels list
+            int LabelObjIndex = cbList_FindOffset(&SymbolsTable->LabelTable, Jump->LabelName, cbList_CompareString);
+            if(LabelObjIndex >= 0)
+            {
+                // Get the label info, the current instruction position, and set the jump offset
+                cbLabel* LabelObj = cbList_GetElement(&SymbolsTable->LabelTable, LabelObjIndex);
+                int InstrIndex = cbList_FindOffset(&SymbolsTable->InstructionsList, Jump->Instr, cbList_ComparePointer);
+                
+                // Offset = Label dest. - jump origin
+                Jump->Instr->Arg = LabelObj->Index - InstrIndex;
+            }
+            // Else, never found, error
+            else
+                cbUtil_RaiseError(ErrorList, cbError_MissingLabel, Jump->LineNumber);
+            
+            // All done with this jump object
+            free(Jump->LabelName);
+            free(Jump);
+        }
+        
+        // All done with compilation
     }
     else
-        cbParse_RaiseError(ErrorList, cbError_Overflow, 0);
+        cbUtil_RaiseError(ErrorList, cbError_Overflow, 0);
     
     /*** Clean-Up ***/
     
@@ -161,11 +189,22 @@ bool cbParse_CompileProgram(cbSymbolsTable* SymbolsTable, cbList* ErrorList, cbV
     while(cbList_GetCount(&SymbolsTable->VariablesList)) free(cbList_PopFront(&SymbolsTable->VariablesList));
     cbList_Release(&SymbolsTable->VariablesList);
     
-    // The jump table is mixed: it is always Node (ref), Str, Node (ref), Str... etc
-    while(cbList_GetCount(&SymbolsTable->JumpTable)) { cbList_PopFront(&SymbolsTable->JumpTable); free(cbList_PopFront(&SymbolsTable->JumpTable)); }
+    // Need to deep-free the jump tabel and the label table
+    cbJump* Jump = NULL;
+    while((Jump = cbList_PeekBack(&SymbolsTable->JumpTable)) != NULL)
+    {
+        free(Jump->LabelName);
+        free(Jump);
+    }
     cbList_Release(&SymbolsTable->JumpTable);
     
     // Nothing to release, the pointers point to the process memory map
+    cbLabel* Label = NULL;
+    while((Label = cbList_PeekBack(&SymbolsTable->LabelTable)) != NULL)
+    {
+        free(Label->LabelName);
+        free(Label);
+    }
     cbList_Release(&SymbolsTable->LabelTable);
     
     // Are there any errors?
@@ -213,7 +252,7 @@ void cbParse_BuildNode(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* Er
         {
             // If the stack is empty, fail out
             if(cbList_GetCount(&SymbolsTable->BlockStack) <= 0)
-                cbParse_RaiseError(ErrorList, cbError_BlockMismatch, Node->LineNumber);
+                cbUtil_RaiseError(ErrorList, cbError_BlockMismatch, Node->LineNumber);
             else
             {
                 // Get the current node and the prev. node
@@ -246,7 +285,7 @@ void cbParse_BuildNode(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* Er
         {
             // If the stack is empty, fail out
             if(cbList_GetCount(&SymbolsTable->BlockStack) <= 0)
-                cbParse_RaiseError(ErrorList, cbError_BlockMismatch, Node->LineNumber);
+                cbUtil_RaiseError(ErrorList, cbError_BlockMismatch, Node->LineNumber);
             else
             {
                 // Get the jump instruction we need to change and the current address index
@@ -254,10 +293,12 @@ void cbParse_BuildNode(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* Er
                 size_t OpCount = cbList_GetCount(&SymbolsTable->InstructionsList);
                 
                 // Set the jump location down to this location, but don't add any ops..
-                Target->Instruction->Arg = Target->Index - OpCount;
+                Target->Instruction->Arg = OpCount - Target->Index - 1;
+                
+                // Done with target
+                free(Target);
             }
         }
-        
         // No else: there are production rules we don't care about like "expression"
     }
     // Terminals has data
@@ -274,18 +315,21 @@ void cbParse_BuildNode(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* Er
         else if(Type == cbLexIDType_Variable)
             cbParse_LoadVariable(SymbolsTable, Node, ErrorList);
         
-        // Regular op turns straight to code
-        // Note: Args are modified later on once all items are merged together
+        // Regular op turns straight to code *or* is a function call
         else if(Type == cbLexIDType_Op)
             cbParse_LoadInstruction(SymbolsTable, Node->Data.Terminal.Data.Op, ErrorList, 0);
         
+        // Functions
+        else if(Type == cbLexIDType_Func)
+            cbParse_LoadFunction(SymbolsTable, Node, ErrorList);
+        
         // Error
         else
-            cbParse_RaiseError(ErrorList, cbError_UnknownOp, Node->LineNumber);
+            cbUtil_RaiseError(ErrorList, cbError_UnknownOp, Node->LineNumber);
     }
     // Unknown major type
     else
-        cbParse_RaiseError(ErrorList, cbError_UnknownToken, Node->LineNumber);
+        cbUtil_RaiseError(ErrorList, cbError_UnknownToken, Node->LineNumber);
 }
 
 cbInstruction* cbParse_LoadInstruction(cbSymbolsTable* SymbolsTable, cbOps Op, cbList* ErrorList, int Arg)
@@ -329,7 +373,7 @@ void cbParse_LoadLiteral(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* 
     }
     // Unknown...
     else
-        cbParse_RaiseError(ErrorList, cbError_UnknownToken, Node->LineNumber);
+        cbUtil_RaiseError(ErrorList, cbError_UnknownToken, Node->LineNumber);
     
     // Register this data in the static data list and keep a handle
     int AddressIndex = (int)cbList_GetCount(&SymbolsTable->DataList);
@@ -360,14 +404,14 @@ void cbParse_LoadVariable(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList*
 
 void cbParse_LoadGoto(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList)
 {
-    // Jump instruction (though saved into the...)
-    cbParse_LoadInstruction(SymbolsTable, cbOps_Goto, ErrorList, 0);
-    cbInstruction* JumpInstr = cbList_PeekBack(&SymbolsTable->InstructionsList);
+    // Create a jump object
+    cbJump* Jump = malloc(sizeof(cbJump));
+    Jump->Instr = cbParse_LoadInstruction(SymbolsTable, cbOps_Goto, ErrorList, 0);
+    Jump->LabelName = cbUtil_stralloc(Node->Data.Terminal.Data.String);
+    Jump->LineNumber = Node->LineNumber;
     
-    // Save into the jump table, though warning: this table is actually a
-    // mixed array of 0: jump instruction, then 1: label-name
-    cbList_PushBack(&SymbolsTable->JumpTable, JumpInstr);
-    cbList_PushBack(&SymbolsTable->JumpTable, cbUtil_stralloc(Node->Data.Terminal.Data.String));
+    // Save into the jump table
+    cbList_PushBack(&SymbolsTable->JumpTable, Jump);
 }
 
 void cbParse_LoadLabel(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList)
@@ -379,4 +423,39 @@ void cbParse_LoadLabel(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* Er
     
     // Save into the labels table
     cbList_PushBack(&SymbolsTable->LabelTable, Label);
+}
+
+void cbParse_LoadFunction(cbSymbolsTable* SymbolsTable, cbLexNode* Node, cbList* ErrorList)
+{
+    /*
+      Built-in functions that natively run in the VM
+       cbOps_Input,
+       cbOps_Disp,
+       cbOps_Output,
+       cbOps_GetKey,
+       cbOps_Clear,
+    */
+    
+    // This node itself contains the function name, while the right points to the args list
+    const char* FuncName = Node->Data.Terminal.Data.String;
+    size_t ArgCount = cbLex_GetArgCount(Node->Right);
+    
+    // Hard-coded function check
+    cbOps OpFunc = cbOps_Nop;
+    if(strcmp(FuncName, "input") == 0 && ArgCount == 0)
+        OpFunc = cbOps_Input;
+    else if(strcmp(FuncName, "disp") == 0 && ArgCount == 1)
+        OpFunc = cbOps_Disp;
+    else if(strcmp(FuncName, "output") == 0 && ArgCount == 3)
+        OpFunc = cbOps_Output;
+    else if(strcmp(FuncName, "getkey") == 0 && ArgCount == 0)
+        OpFunc = cbOps_GetKey;
+    else if(strcmp(FuncName, "clear") == 0 && ArgCount == 0)
+        OpFunc = cbOps_Clear;
+    
+    // Never matched, raise error
+    if(OpFunc == cbOps_Nop)
+        cbUtil_RaiseError(ErrorList, cbError_InvalidID, Node->LineNumber);
+    else
+        cbParse_LoadInstruction(SymbolsTable, OpFunc, ErrorList, 0);
 }

@@ -68,4 +68,7 @@ __cbEXPORT size_t cbDebug_GetLine(cbVirtualMachine* Processor);
 // Get the formal operator name of a given instruction
 __cbEXPORT const char* const cbDebug_GetOpName(cbOps Op);
 
+// Returns the english-language error string associated with the given error code
+__cbEXPORT const char* const cbDebug_GetErrorMsg(cbError ErrorCode);
+
 #endif

@@ -46,7 +46,7 @@ bool cbParse_ParseProgram(const char* Program, cbList* ErrorList, cbSymbolsTable
     
     // If the local stack is not empty, then there is a dangling end-block
     if(SymbolsTable->BlockDepth > 0)
-        cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
+        cbUtil_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
     
     // Done parsing, return the symbols table
     return cbList_GetCount(ErrorList) <= 0;
@@ -91,7 +91,7 @@ cbLexNode* cbParse_ParseLine(const char* Line, cbSymbolsTable* SymbolsTable, siz
         
         // On error
         if(LexTree == NULL)
-            cbParse_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
+            cbUtil_RaiseError(ErrorList, cbError_UnknownLine, LineCount);
         
         // Release the tokens
         while(cbList_GetCount(&Tokens) > 0)
@@ -127,7 +127,7 @@ cbLexNode* cbParse_IsStatement(cbList* Tokens, cbSymbolsTable* SymbolsTable, siz
     {
         // Can never close non-existing blocks
         if(SymbolsTable->BlockDepth <= 0)
-            cbParse_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
+            cbUtil_RaiseError(ErrorList, cbError_BlockMismatch, LineCount);
         else
             SymbolsTable->BlockDepth--;
         return Node;
@@ -175,7 +175,7 @@ cbLexNode* cbParse_IsDeclaration(cbList* Tokens, size_t LineCount, cbList* Error
             Node->Right = cbParse_IsExpression(&ExpressionTokens, LineCount, ErrorList);
             if(Node->Right == NULL)
             {
-                cbParse_RaiseError(ErrorList, cbError_Assignment, LineCount);
+                cbUtil_RaiseError(ErrorList, cbError_Assignment, LineCount);
                 cbLex_DeleteNode(&Node);
             }
         }
@@ -299,7 +299,7 @@ cbLexNode* cbParse_IsStatementGoto(cbList* Tokens, size_t LineCount, cbList* Err
             Node->Middle = cbLex_CreateNodeS(ID, LineCount);
         }
         else
-            cbParse_RaiseError(ErrorList, cbError_InvalidID, LineCount);
+            cbUtil_RaiseError(ErrorList, cbError_InvalidID, LineCount);
     }
     
     return Node;
@@ -321,7 +321,7 @@ cbLexNode* cbParse_IsStatementLabel(cbList* Tokens, size_t LineCount, cbList* Er
             Node->Middle = cbLex_CreateNodeS(ID, LineCount);
         }
         else
-            cbParse_RaiseError(ErrorList, cbError_InvalidID, LineCount);
+            cbUtil_RaiseError(ErrorList, cbError_InvalidID, LineCount);
     }
     
     return Node;
@@ -354,13 +354,17 @@ cbLexNode* cbParse_IsExpression(cbList* Tokens, size_t LineCount, cbList* ErrorL
         char* EndParenth = cbList_PeekBack(Tokens);
         if(cbParse_IsID(ID, strlen(ID)) && strcmp(StartParenth, "(") == 0 && strcmp(EndParenth, ")") == 0)
         {
-            // Function call tree element
-            Node = cbLex_CreateNodeO(cbOps_Func, LineCount);
+            // Functions should be curried (i.e. (((arg 1), arg 2), arg3) etc..) on the *RIGHT* node
+            // While the function itself is named in this terminal node
             
-            // Make sure that the subset is an expression list
+            // Function call tree element
+            // Note: function-names are stored in the middle, while the args-list is on the right
+            Node = cbLex_CreateNodeFunc(ID, LineCount);
+            
+            // Make sure that the subset is an expression list on the right (done so it is parsed before)
             cbList ExpressionList;
             cbList_Subset(Tokens, &ExpressionList, 2, TokenCount - 3);
-            Node->Middle = cbParse_IsExpressionList(&ExpressionList, LineCount, ErrorList);
+            Node->Right = cbParse_IsExpressionList(&ExpressionList, LineCount, ErrorList);
         }
     }
     
@@ -379,13 +383,12 @@ cbLexNode* cbParse_IsExpressionList(cbList* Tokens, size_t LineCount, cbList* Er
 {
     // Expression list product rule:
     // ExpressionList -> {ExpressionList, Expression | Expression | Empty}
+    // Note that with an expression list, we always save the expression in the center
+    // and then any more expressions (i.e. ".. -> {*ExpressionList*, Expression | ...}") to the right.
     cbLexNode* Node = NULL;
     
-    // If empty, that is fine, but we don't save the symbol
-    if(cbList_GetCount(Tokens) <= 0)
-        Node = cbLex_CreateNode(cbSymbol_None, LineCount); // Empty
-    // Else, attempt to apply the production rule
-    else
+    // Only process if there are args
+    if(cbList_GetCount(Tokens) > 0)
     {
         char* Operators[] = { "," };
         Node = cbParse_IsBinaryProduction(Tokens, LineCount, ErrorList, cbParse_IsExpressionList, cbParse_IsExpression, cbParse_IsExpression, Operators, 1);
@@ -444,7 +447,11 @@ cbLexNode* cbParse_IsFactor(cbList* Tokens, size_t LineCount, cbList* ErrorList)
             Node = cbLex_CreateNodeV(Token, LineCount);
         // String
         else if(cbLang_IsString(Token, TokenLength))
-            Node = cbLex_CreateNodeS(Token, LineCount);
+        {
+            // Strip the quotes (by giving a +1 shift, and clipping the last char)
+            Token[TokenLength - 1] = '\0';
+            Node = cbLex_CreateNodeS(Token + 1, LineCount);
+        }
         // Float
         else if(cbLang_IsFloat(Token, TokenLength))
         {
@@ -461,7 +468,7 @@ cbLexNode* cbParse_IsFactor(cbList* Tokens, size_t LineCount, cbList* ErrorList)
         }
         // Else, unknown
         else
-            cbParse_RaiseError(ErrorList, cbError_UnknownToken, LineCount);
+            cbUtil_RaiseError(ErrorList, cbError_UnknownToken, LineCount);
     }
     else
     {
@@ -588,19 +595,32 @@ cbLexNode* cbParse_IsKeywordBoolProduction(cbList* Tokens, size_t LineCount, cbL
     {
         // First token must be the keyword and second and last token should always be '(' and ')' respectivly
         char* IfToken = cbList_GetElement(Tokens, 0);
+        
         char* FirstParenth = cbList_GetElement(Tokens, 1);
+        bool HasOpenParenth = strcmp(FirstParenth, "(") == 0;
+        
         char* LastParenth = cbList_PeekBack(Tokens);
-        if(strcmp(IfToken, Keyword) == 0 && strcmp(FirstParenth, "(") == 0 && strcmp(LastParenth, ")") == 0)
+        bool HasCloseParenth = strcmp(LastParenth, ")") == 0;
+        
+        // If valid keyword
+        if(strcmp(IfToken, Keyword) == 0)
         {
-            // Valid keyword, save the boolean expression within self
-            Node = cbLex_CreateNodeSymbol(Symbol, LineCount);
-            
-            // Pase the boolean expression within the parenth
-            cbList BoolSubset;
-            cbList_Subset(Tokens, &BoolSubset, 2, cbList_GetCount(Tokens) - 3);
-            
-            // Boolean expression must be valid
-            Node->Middle = cbParse_IsBool(&BoolSubset, LineCount, ErrorList);
+            // Check parenth
+            if(HasOpenParenth && HasCloseParenth)
+            {
+                // Valid keyword, save the boolean expression within self
+                Node = cbLex_CreateNodeSymbol(Symbol, LineCount);
+                
+                // Pase the boolean expression within the parenth
+                cbList BoolSubset;
+                cbList_Subset(Tokens, &BoolSubset, 2, cbList_GetCount(Tokens) - 3);
+                
+                // Boolean expression must be valid
+                Node->Middle = cbParse_IsBool(&BoolSubset, LineCount, ErrorList);
+            }
+            // Else, error parenth mismatch
+            else
+                cbUtil_RaiseError(ErrorList, cbError_ParenthMismatch, LineCount);
         }
     }
     
@@ -648,14 +668,25 @@ cbLexNode* cbParse_IsBinaryProduction(cbList* Tokens, size_t LineCount, cbList* 
                     cbLexNode* LeftProduct = SymbolA(&LeftList, LineCount, ErrorList);
                     cbLexNode* RightProduct = SymbolB(&RightList, LineCount, ErrorList);
                     
-                    // If both are valid and we have an op, form a node
+                    // If both are valid, form a node
+                    // The token to op translation is optional
                     cbOps Op;
                     bool ValidOp = cbUtil_OpFromStr(DelimList[j], &Op);
-                    if(LeftProduct != NULL && RightProduct != NULL && ValidOp)
+                    if(LeftProduct != NULL && RightProduct != NULL)
                     {
-                        Node = cbLex_CreateNodeO(Op, LineCount);
-                        Node->Left = LeftProduct;
-                        Node->Right = RightProduct;
+                        // If an op separates it, make the node an op
+                        if(ValidOp)
+                            Node = cbLex_CreateNodeO(Op, LineCount);
+                        // Else if it is an argument list, split as a new symbol
+                        else if(strcmp(DelimList[j], ",") == 0)
+                            Node = cbLex_CreateNodeSymbol(cbSymbol_ExpressionList, LineCount);
+                        
+                        // Only set if we actually make a valid node
+                        if(Node != NULL)
+                        {
+                            Node->Left = LeftProduct;
+                            Node->Right = RightProduct;
+                        }
                     }
                     // Release left or right on failure
                     else
@@ -677,17 +708,6 @@ cbLexNode* cbParse_IsBinaryProduction(cbList* Tokens, size_t LineCount, cbList* 
     
     // All done
     return Node;
-}
-
-void cbParse_RaiseError(cbList* ErrorList, cbError ErrorCode, size_t LineNumber)
-{
-    // Allocate a new parse-error object
-    cbParseError* NewError = malloc(sizeof(cbParseError));
-    NewError->ErrorCode = ErrorCode;
-    NewError->LineNumber = LineNumber;
-    
-    // Insert into list
-    cbList_PushBack(ErrorList, NewError);
 }
 
 cbLexNode* cbLex_CreateNode(cbLexNodeType Type, size_t LineNumber)
@@ -752,6 +772,29 @@ cbLexNode* cbLex_CreateNodeO(cbOps Op, size_t LineNumber)
     Node->Data.Terminal.Type = cbLexIDType_Op;
     Node->Data.Terminal.Data.Op = Op;
     return Node;
+}
+
+cbLexNode* cbLex_CreateNodeFunc(const char* FunctionName, size_t LineNumber)
+{
+    cbLexNode* Node = cbLex_CreateNode(cbLexNodeType_Terminal, LineNumber);
+    Node->Data.Terminal.Type = cbLexIDType_Func;
+    Node->Data.Terminal.Data.String = cbUtil_stralloc(FunctionName);
+    return Node;
+}
+
+size_t cbLex_GetArgCount(cbLexNode* ArgNode)
+{
+    // If null, return 0 (no args)
+    if(ArgNode == NULL)
+        return 0;
+    
+    // If not an expression list, return 1 (min arg. count, and we know there is *some* args)
+    else if(ArgNode->Type != cbLexNodeType_Symbol || ArgNode->Data.Symbol != cbSymbol_ExpressionList)
+        return 1;
+    
+    // How many expressionlists are there on the left?
+    else
+        return cbLex_GetArgCount(ArgNode->Left) + 1;
 }
 
 void cbLex_DeleteNode(cbLexNode** Node)
